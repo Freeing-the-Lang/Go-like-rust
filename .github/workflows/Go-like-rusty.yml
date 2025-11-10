@@ -1,4 +1,4 @@
-name: '🏛️ Go-like-Rust Transpiler — *All is Heap (Heap-Hop Edition v4.2 / Go Executable Release)*'
+name: '🏛️ Go-like-Rust Transpiler — *All is Heap (Heap-Hop Edition v4.3 / Go Executable Release)*'
 
 on:
   push:
@@ -172,10 +172,10 @@ EOF
       - name: "🚀 Create or Update Release"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "heap-hop-v4.2"
+          tag_name: "heap-hop-v4.3"
           name: "Heap-Hop Edition — All is Heap Executable (Go-like Rust Transpiler)"
           body: |
-            🏛️ **Go-like-Rust Transpiler — All is Heap (v4.2)**  
+            🏛️ **Go-like-Rust Transpiler — All is Heap (v4.3)**  
             ✅ Rust → Go 기반 Heap 모드 실행파일 릴리즈  
             🦀 RustSpec 참조 + Heap-Hop Philosophy 반영  
             🔐 ProofLedger + SHA256 해시 포함  
