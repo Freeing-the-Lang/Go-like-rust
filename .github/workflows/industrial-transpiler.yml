@@ -1,0 +1,117 @@
+name: 🏭 Go-like-Rust Transpiler (Industrial Loop Edition)
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: "0 0 * * *"   # 매일 자정 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BUILD_DIR: build/transpiled
+  LEDGER_DIR: proof
+  SNAPSHOT_TAG: snapshot-transpile-${{ github.run_number }}
+  DATE_UTC: ${{ github.run_id }}
+
+jobs:
+  transpile:
+    runs-on: ubuntu-latest
+    steps:
+      # -------------------------------------
+      # 🧭 Checkout Repository
+      # -------------------------------------
+      - name: 🧭 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -------------------------------------
+      # ⚙️ Setup Go Environment
+      # -------------------------------------
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+
+      # -------------------------------------
+      # 🧩 Create Build Directory
+      # -------------------------------------
+      - name: 🧩 Prepare Directories
+        run: |
+          mkdir -p "$BUILD_DIR" "$LEDGER_DIR"
+
+      # -------------------------------------
+      # 🦀 Transpile all Rust-like sources
+      # -------------------------------------
+      - name: 🦀 Transpile Rust-like sources
+        run: |
+          echo "=== Go-like-Rust Transpile Run ($(date -u)) ==="
+          for f in $(find examples -name '*.rs'); do
+            echo "➡️  Transpiling: $f"
+            go run main.go transpile "$f"
+          done
+          find examples -name '*_gen.go' -exec cp {} "$BUILD_DIR" \;
+
+      # -------------------------------------
+      # 🧪 Verify Generated Go Builds
+      # -------------------------------------
+      - name: 🧪 Run Transpiled Outputs
+        run: |
+          for g in $(find "$BUILD_DIR" -name '*_gen.go'); do
+            echo "▶️ Running: $g"
+            go run "$g" || echo "⚠️ $g failed"
+          done
+
+      # -------------------------------------
+      # 🔒 Generate SHA256 ProofLedger
+      # -------------------------------------
+      - name: 🔒 Generate ProofLedger
+        run: |
+          cd "$BUILD_DIR"
+          sha256sum *_gen.go > ../proof/SHA256SUMS.txt
+          cd ../proof
+          echo "R3C TRANSPILER PROOFLEDGER — $(date -u)" > ProofLedger.txt
+          echo "Generated Files: $(ls ../$BUILD_DIR | wc -l)" >> ProofLedger.txt
+          echo "Hash Count: $(wc -l SHA256SUMS.txt | awk '{print $1}')" >> ProofLedger.txt
+          echo "UTC Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> ProofLedger.txt
+          echo "Snapshot Tag: $SNAPSHOT_TAG" >> ProofLedger.txt
+          cat SHA256SUMS.txt >> ProofLedger.txt
+          cd ..
+
+      # -------------------------------------
+      # 🧾 Commit and Push Results
+      # -------------------------------------
+      - name: 🧾 Commit & Push Ledger + Generated Code
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $BUILD_DIR/* proof/*
+          git commit -m "🏭 Auto-transpiled Go-like-Rust Snapshot"
+          git push origin main || echo "✅ No new commit"
+
+      # -------------------------------------
+      # 🌀 Create or Replace Snapshot Release
+      # -------------------------------------
+      - name: 🌀 Create Snapshot Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "$SNAPSHOT_TAG" --yes || true
+          gh release create "$SNAPSHOT_TAG" "$BUILD_DIR"/*.go proof/ProofLedger.txt \
+            --title "Go-like-Rust Transpile Snapshot" \
+            --notes "Automated transpile and verification proof — $(date -u)"
+
+      # -------------------------------------
+      # 📦 Upload Artifact for CI logs
+      # -------------------------------------
+      - name: 📦 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: transpile-proof-${{ github.run_number }}
+          path: |
+            $BUILD_DIR/
+            proof/
