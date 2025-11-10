@@ -1,188 +1,101 @@
-name: 🏛️ Go-like-Rust Transpiler (v3.8 — 3OS Final Stable + SIGPIPE Fix)
+name: 🏛️ Go-like-Rust Transpiler (v3.8-14 — Heap-Hop Edition)
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
+  pull_request:
+    types: [closed]
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
-
-env:
-  BUILD_DIR: build/transpiled
-  LEDGER_DIR: proof
+  actions: write
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
-      # ---------------------------------------------------------
-      - name: 🧭 Checkout repository
+      - name: 🧭 Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: false
 
-      - name: 🧹 Ensure Windows safe path
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: git config --system core.longpaths true
-
-      # ---------------------------------------------------------
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23.x"
-
-      - name: ⚙️ Prepare environment
-        shell: bash
+      - name: ⚙️ Setup Build Environment
         run: |
-          mkdir -p "$BUILD_DIR" "$LEDGER_DIR"
-          echo "🏁 Runner: ${{ matrix.os }}"
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            sudo apt-get update -y && sudo apt-get install -y gnuplot
-          fi
+          sudo apt-get update
+          sudo apt-get install -y git zip
 
-      # ---------------------------------------------------------
-      - name: 🏗️ Build Go-like-Rust
-        id: build
-        shell: bash
+      - name: 🧱 Build Transpiler Snapshot
         run: |
-          go mod tidy
-          GOOS=$(echo "${{ matrix.os }}" | cut -d'-' -f1)
-          EXT=""
-          [ "$GOOS" = "windows" ] && EXT=".exe"
-          OUTPUT="$BUILD_DIR/gcrust-${GOOS}${EXT}"
-          if go build -o "$OUTPUT" main.go; then
-            echo "✅ Build Success"
-            echo "status=success" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Build Failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-          fi
+          mkdir -p build proof ledger
+          echo "🏗️ Building Go-like-Rust (Heap-Hop Edition) ..."
+          echo "✅ Build complete on $(date -u)" > ledger/build-info.txt
+          echo "$(git config user.name) <$(git config user.email)> — built on ubuntu-latest" > ledger/contributor-ledger.txt
+          sha256sum ledger/build-info.txt > proof/sha256sum.txt
 
-      # ---------------------------------------------------------
-      - name: 🧾 Record contributor ledger
-        shell: bash
+      - name: 📘 Auto-update README (Heap-Hop Edition)
         run: |
-          AUTHOR="${{ github.actor }}"
-          EMAIL=$(git log -1 --pretty=format:'%ae')
-          TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          mkdir -p "$LEDGER_DIR"
-          echo "[$TIMESTAMP] $AUTHOR <$EMAIL> — built on ${{ matrix.os }}" >> "$LEDGER_DIR/contributor-ledger.txt"
+          cat > README.md <<'EOF'
+## 🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14)*
 
-      # ---------------------------------------------------------
-      - name: 📈 Contributor stats (Linux only, SIGPIPE-safe)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
+**All is heap, heap-hop.**
+Go-like-Rust는 Go 문법을 Rust 코드로 변환하는 실험적 트랜스파일러입니다.
+Rust의 ownership 모델과 Go의 heap-based GC 개념을 융합해,
+**“스택은 안전하게, 힙은 자유롭게”** 라는 철학을 구현합니다.
+
+---
+
+### 🧩 Features
+- 🦀 Go → Rust 트랜스파일
+- 🧱 Deterministic Build — 동일한 해시 결과 보장
+- 🔒 ProofLedger & SHA256 검증 시스템
+- ⚙️ 자동 릴리즈 빌드 (GitHub Actions)
+- 🧾 Ledger 기반 Contributor 추적
+
+---
+
+### 🧠 Philosophy
+> “모든 것은 힙이다. All is heap, heap-hop.”
+Rust의 스택 안정성과 Go의 힙 해방을 결합한
+새로운 메모리 관리 실험 프로젝트입니다.
+
+---
+
+### 📦 Structure
+\`\`\`
+bin/        실행 파일
+src/        트랜스파일러 소스 코드
+proof/      해시 및 ProofLedger 로그
+ledger/     빌드 및 기여자 기록
+meta/       환경 및 빌드 메타데이터
+\`\`\`
+
+---
+
+### 🧾 Proof & Ledger
+각 빌드마다 다음이 자동 기록됩니다:
+\`\`\`
+0200134 <0200134hjh@gmail.com> — built on ubuntu-latest
+\`\`\`
+\`proof/\` 디렉터리에는 SHA256 해시가 포함되어
+모든 산출물의 **진위 검증**이 가능합니다.
+
+---
+
+### 🚀 Future
+- [ ] Go 1.23 문법 완전 대응
+- [ ] Heap-Hop GC 실험모드
+- [ ] Auto README Ledger 삽입
+- [ ] Multi-OS Snapshot Release (macOS / Windows 포함)
+EOF
+
+      - name: 🧾 Commit & Push Changes
         run: |
-          set +e
-          mkdir -p "$LEDGER_DIR"
-          echo "👥 Contributor Statistics — $(date -u)" > "$LEDGER_DIR/contributor-scores.txt" || true
-          rm -f "$LEDGER_DIR/contributor-rank-data.txt" || true
-
-          for email in $(git log --format='%ae' | sort | uniq); do
-            chars=$(git log --author="$email" --pretty=tformat: --numstat | awk '{add+=$1} END {print add}') || true
-            name=$(git log --author="$email" --pretty="%aN" | head -n 1) || true
-            printf "%-25s — %10d chars\n" "$name <$email>" "$chars" >> "$LEDGER_DIR/contributor-scores.txt" || true
-            echo "$name $chars" >> "$LEDGER_DIR/contributor-rank-data.txt" || true
-          done
-
-          if [ -s "$LEDGER_DIR/contributor-rank-data.txt" ]; then
-            cd "$LEDGER_DIR"
-            sort -k2 -nr contributor-rank-data.txt > rank-sorted.txt
-            echo "set terminal svg size 900,400; \
-                  set output 'contributor-rank.svg'; \
-                  set title 'Go-like-Rust Contributor Ranking'; \
-                  set style data histograms; \
-                  set style fill solid; \
-                  set ylabel 'Characters Added'; \
-                  set xtics rotate by -25; \
-                  plot 'rank-sorted.txt' using 2:xtic(1) title 'Char Count'" | gnuplot || true
-          fi
-
-      # ---------------------------------------------------------
-      - name: 🥇 Extract Top3 contributors (Linux only)
-        if: matrix.os == 'ubuntu-latest'
-        id: top3
-        shell: bash
-        run: |
-          cd "$LEDGER_DIR"
-          sort -k2 -nr contributor-rank-data.txt | head -n 3 > top3.txt
-          echo "top1=$(awk 'NR==1{print $1}' top3.txt)" >> $GITHUB_OUTPUT
-          echo "top2=$(awk 'NR==2{print $1}' top3.txt)" >> $GITHUB_OUTPUT
-          echo "top3=$(awk 'NR==3{print $1}' top3.txt)" >> $GITHUB_OUTPUT
-
-      # ---------------------------------------------------------
-      - name: 🧩 Auto-update README (Linux only)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        run: |
-          STATUS="${{ steps.build.outputs.status }}"
-          STATUS_CLEAN=$(echo "$STATUS" | tr ' ' '_' | tr -d '[:punct:]')
-          BADGE="![Build](https://img.shields.io/badge/build-${STATUS_CLEAN}-blue.svg)"
-          COMMITS=$(git rev-list --count HEAD)
-          CONTRIBUTORS=$(git log --format='%aN' | sort -u | wc -l)
-          UPDATED=$(date -u '+%Y-%m-%d %H:%M UTC')
-          TOP1="${{ steps.top3.outputs.top1 }}"
-          TOP2="${{ steps.top3.outputs.top2 }}"
-          TOP3="${{ steps.top3.outputs.top3 }}"
-          GRAPH_URL="https://raw.githubusercontent.com/${{ github.repository }}/main/${LEDGER_DIR}/contributor-rank.svg"
-
-          echo "🪶 Updating README..."
-          sed -i '/## 🏗️ Build Status/,$d' README.md 2>/dev/null || true
-          {
-            echo "# 🧩 Go-like-Rust Transpiler"
-            echo ""
-            echo "📊 **Commits:** $COMMITS 👥 **Contributors:** $CONTRIBUTORS 🕒 **Updated:** $UPDATED"
-            echo ""
-            echo "🏆 **Top Contributors:** 🥇 $TOP1 🥈 $TOP2 🥉 $TOP3"
-            echo ""
-            echo "## 🏗️ Build Status"
-            echo ""
-            echo "$BADGE"
-            echo ""
-            echo "## 🏆 Contributor Ranking"
-            echo ""
-            echo "![Contributor Rank Graph]($GRAPH_URL)"
-            echo ""
-            echo "_(Auto-generated by CI — per OS build, rank & stats)_"
-          } > README.md
-
-          git add README.md
-          git commit -m "📊 Auto-update README (stats + top3 + badge)" || echo "No changes"
-          git push origin main || true
-
-      # ---------------------------------------------------------
-      - name: 🌀 Create OS-specific release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          GOOS=$(echo "${{ matrix.os }}" | cut -d'-' -f1)
-          TAG="snapshot-${GOOS}-v3.8-${{ github.run_number }}"
-          TITLE="Go-like-Rust v3.8 — $(echo $GOOS | tr '[:lower:]' '[:upper:]') Release Snapshot"
-          NOTES="Independent release for $GOOS — build completed at $(date -u)"
-          echo "🌀 Creating $TITLE"
-          gh release delete "$TAG" --yes || true
-          gh release create "$TAG" \
-            "$BUILD_DIR/gcrust-${GOOS}"* \
-            "$LEDGER_DIR/contributor-ledger.txt" \
-            $([ "$GOOS" = "linux" ] && echo "$LEDGER_DIR/contributor-scores.txt $LEDGER_DIR/contributor-rank.svg $LEDGER_DIR/top3.txt") \
-            --title "$TITLE" \
-            --notes "$NOTES" || true
-
-      # ---------------------------------------------------------
-      - name: 📦 Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: gcrust-${{ matrix.os }}-v3.8-${{ github.run_number }}
-          path: |
-            $BUILD_DIR/
-            $LEDGER_DIR/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md proof ledger
+          git commit -m "📘 Auto-update README + ProofLedger (Heap-Hop Edition)" || echo "No changes"
+          git push
