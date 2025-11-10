@@ -1,4 +1,4 @@
-name: "🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14 / 3OS Release)*"
+name: "🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14 / 3OS Auto-RustDiff)*"
 
 on:
   push:
@@ -27,13 +27,13 @@ jobs:
       - name: "⚙️ Setup Environment"
         shell: bash
         run: |
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            sudo apt-get update && sudo apt-get install -y git zip
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            brew install --quiet git || true
-          else
+          echo "▶️ Setting up environment for ${{ matrix.os }}"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update && sudo apt-get install -y git zip diffutils
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install git diffutils || true
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
             echo "Using preinstalled Git on Windows runner"
-            git --version || { echo "Git not found on PATH"; exit 1; }
           fi
 
       - name: "🏗️ Build Transpiler Snapshot"
@@ -44,17 +44,48 @@ jobs:
           echo "✅ Build complete on $(date -u)" > ledger/build-info-${{ matrix.os }}.txt
           echo "$(git config user.name) <$(git config user.email)> — built on ${{ matrix.os }}" > ledger/contributor-ledger-${{ matrix.os }}.txt
 
+      - name: "🦀 Detect Rust Version & Diff Changes"
+        shell: bash
+        run: |
+          mkdir -p proof
+          SYNC_DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
+          RUST_VERSION=$(rustc --version 2>/dev/null || echo "Rust not installed")
+          echo "🔎 Current Rust: $RUST_VERSION"
+          echo "$RUST_VERSION" > proof/current_rust_version.txt
+
+          if [ -f proof/last_rust_version.txt ]; then
+            echo "🧩 Comparing with previous version..."
+            diff -u proof/last_rust_version.txt proof/current_rust_version.txt > proof/rust_diff.txt || true
+          else
+            echo "(First sync, no previous version)" > proof/rust_diff.txt
+          fi
+
+          cp proof/current_rust_version.txt proof/last_rust_version.txt
+
+          {
+            echo ""
+            echo "---"
+            echo "🦀 **RustSpec Auto-Update**"
+            echo "Last Synced: $SYNC_DATE"
+            echo "Detected Version: $RUST_VERSION"
+            echo "Changes since last sync:"
+            cat proof/rust_diff.txt | sed 's/^/    /'
+          } >> README.md
+
+      - name: "🔐 Generate SHA256 Proof"
+        shell: bash
+        run: |
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum ledger/build-info-${{ matrix.os }}.txt > proof/sha256sum-${{ matrix.os }}.txt
           else
-            certutil -hashfile "ledger\\build-info-${{ matrix.os }}.txt" SHA256 > "proof\\sha256sum-${{ matrix.os }}.txt"
+            certutil -hashfile "ledger\\build-info-${{ matrix.os }}.txt" SHA256 | findstr /V "certutil" > proof\\sha256sum-${{ matrix.os }}.txt
           fi
 
       - name: "📦 Archive Artifacts"
         shell: bash
         run: |
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            powershell Compress-Archive build,proof,ledger go-like-rust-${{ matrix.os }}.zip
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            powershell Compress-Archive -Path build,proof,ledger -DestinationPath go-like-rust-${{ matrix.os }}.zip
           else
             zip -r go-like-rust-${{ matrix.os }}.zip build proof ledger
           fi
@@ -80,35 +111,26 @@ jobs:
           pattern: "*"
           merge-multiple: true
 
-      - name: "📘 Auto-update README (3OS Heap-Hop Edition)"
-        shell: bash
-        run: |
-          cat <<'EOF' > README.md
-          ## 🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14 / 3OS Release)*
-
-          **All is heap, heap-hop.**
-          3OS 자동 빌드, ProofLedger 검증, 자동 릴리즈 버전입니다.
-          EOF
-
-      - name: "🧾 Commit & Push Changes"
+      - name: "🧾 Commit & Push README + ProofLedger Updates"
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md proof ledger || true
-          git commit -m "📘 Auto-update README + ProofLedger (3OS Heap-Hop Edition)" || echo "No changes"
+          git commit -m "📘 Auto-update README + RustSpec Diff + ProofLedger (3OS Auto-RustDiff)" || echo "No changes to commit"
           git push
 
       - name: "🚀 Create or Update Release"
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "heap-hop-v3.8-14"
-          name: "Heap-Hop Edition — 3OS Snapshot"
+          name: "Heap-Hop Edition — 3OS Auto-RustDiff Snapshot"
           body: |
             🏛️ **Go-like-Rust Transpiler — Heap-Hop Edition (v3.8-14)**  
-            ✅ 3OS 빌드 및 ProofLedger 자동 생성 버전  
-            🔐 Ledger 및 SHA256 검증 포함  
+            ✅ 3OS 자동 빌드 + Rust 버전 자동 감지  
+            🦀 README에 RustSpec 버전 및 Diff 자동 기록  
+            🔐 ProofLedger + SHA256 검증 포함  
             **All is heap, heap-hop.**
-          files: release-assets/**/*.zip
+          files: release-assets/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
