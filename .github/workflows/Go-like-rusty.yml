@@ -1,10 +1,10 @@
-name: 🏛️ Go-like-Rust Transpiler (v3.8-14 — Heap-Hop Edition)
+name: "🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14)*"
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    types: [closed]
+    types: [ closed ]
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
@@ -18,17 +18,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🧭 Checkout Repository
+      - name: "🧭 Checkout Repository"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: ⚙️ Setup Build Environment
+      - name: "⚙️ Setup Build Environment"
         run: |
           sudo apt-get update
           sudo apt-get install -y git zip
 
-      - name: 🧱 Build Transpiler Snapshot
+      - name: "🧱 Build Transpiler Snapshot"
         run: |
           mkdir -p build proof ledger
           echo "🏗️ Building Go-like-Rust (Heap-Hop Edition) ..."
@@ -36,7 +36,7 @@ jobs:
           echo "$(git config user.name) <$(git config user.email)> — built on ubuntu-latest" > ledger/contributor-ledger.txt
           sha256sum ledger/build-info.txt > proof/sha256sum.txt
 
-      - name: 📘 Auto-update README (Heap-Hop Edition)
+      - name: "📘 Auto-update README (Heap-Hop Edition)"
         run: |
           cat > README.md <<'EOF'
 ## 🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14)*
@@ -92,7 +92,7 @@ meta/       환경 및 빌드 메타데이터
 - [ ] Multi-OS Snapshot Release (macOS / Windows 포함)
 EOF
 
-      - name: 🧾 Commit & Push Changes
+      - name: "🧾 Commit & Push Changes"
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
