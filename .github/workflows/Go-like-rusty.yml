@@ -1,4 +1,4 @@
-name: 🏛️ Go-like-Rust Transpiler (v3.1 — Auto Graph Embed + Build Badge + Full Release)
+name: 🏛️ Go-like-Rust Transpiler (v3.1.1 — Auto Graph Embed + Build Badge + Full Release Fix)
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 env:
   BUILD_DIR: build/transpiled
   LEDGER_DIR: proof
-  SNAPSHOT_TAG: snapshot-v3.1-${{ github.run_number }}
+  SNAPSHOT_TAG: snapshot-v3.1.1-${{ github.run_number }}
   BACKUP_REPO: r3c-foundation/r3c-backup
 
 jobs:
@@ -40,7 +40,11 @@ jobs:
         run: |
           echo "🏗️ Building Go-like-Rust transpiler..."
           go mod tidy
-          go build -o "$BUILD_DIR/gcrust" main.go && echo "✅ Build Success" > build_status.txt || echo "❌ Build Failed" > build_status.txt
+          if go build -o "$BUILD_DIR/gcrust" main.go; then
+            echo "✅ Build Success" > build_status.txt
+          else
+            echo "❌ Build Failed" > build_status.txt
+          fi
           BUILD_RESULT=$(cat build_status.txt)
           echo "build_status=$BUILD_RESULT" >> $GITHUB_OUTPUT
           echo "Build status: $BUILD_RESULT"
@@ -88,7 +92,9 @@ jobs:
       # ---------------------------------------------------------
       - name: 🧩 Embed build badge + graph into README
         run: |
-          BUILD_BADGE="![Build Status](https://img.shields.io/badge/build-${{ steps.build.outputs.build_status// /_ }}-blue.svg)"
+          STATUS="${{ steps.build.outputs.build_status }}"
+          STATUS_CLEAN=$(echo "$STATUS" | tr ' ' '_' | tr -d '[:punct:]')
+          BUILD_BADGE="![Build Status](https://img.shields.io/badge/build-${STATUS_CLEAN}-blue.svg)"
           GRAPH_PATH="proof/contributor-rank.svg"
           RAW_URL="https://raw.githubusercontent.com/${{ github.repository }}/main/${GRAPH_PATH}"
 
@@ -122,14 +128,14 @@ jobs:
             "$GITHUB_WORKSPACE/$LEDGER_DIR/contributor-ledger.txt" \
             "$GITHUB_WORKSPACE/$LEDGER_DIR/contributor-scores.txt" \
             "$GITHUB_WORKSPACE/$LEDGER_DIR/contributor-rank.svg" \
-            --title "Go-like-Rust Snapshot v3.1" \
+            --title "Go-like-Rust Snapshot v3.1.1" \
             --notes "Includes auto build badge + embedded contributor graph — $(date -u)" || true
 
       # ---------------------------------------------------------
       - name: 📦 Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gcrust-v3.1-${{ github.run_number }}
+          name: gcrust-v3.1.1-${{ github.run_number }}
           path: |
             $BUILD_DIR/
             $LEDGER_DIR/
