@@ -1,4 +1,4 @@
-name: 🏛️ Go-like-Rust Transpiler (v3.7 — 3OS Final Stable Release + Auto README Update)
+name: 🏛️ Go-like-Rust Transpiler (v3.8 — 3OS Final Stable + SIGPIPE Fix)
 
 on:
   push:
@@ -74,21 +74,26 @@ jobs:
           AUTHOR="${{ github.actor }}"
           EMAIL=$(git log -1 --pretty=format:'%ae')
           TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          mkdir -p "$LEDGER_DIR"
           echo "[$TIMESTAMP] $AUTHOR <$EMAIL> — built on ${{ matrix.os }}" >> "$LEDGER_DIR/contributor-ledger.txt"
 
       # ---------------------------------------------------------
-      - name: 📈 Contributor stats (Linux only)
+      - name: 📈 Contributor stats (Linux only, SIGPIPE-safe)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          echo "👥 Contributor Statistics — $(date -u)" > "$LEDGER_DIR/contributor-scores.txt"
-          rm -f "$LEDGER_DIR/contributor-rank-data.txt"
+          set +e
+          mkdir -p "$LEDGER_DIR"
+          echo "👥 Contributor Statistics — $(date -u)" > "$LEDGER_DIR/contributor-scores.txt" || true
+          rm -f "$LEDGER_DIR/contributor-rank-data.txt" || true
+
           for email in $(git log --format='%ae' | sort | uniq); do
-            chars=$(git log --author="$email" --pretty=tformat: --numstat | awk '{add+=$1} END {print add}')
-            name=$(git log --author="$email" --pretty="%aN" | head -n 1)
-            printf "%-25s — %10d chars\n" "$name <$email>" "$chars" >> "$LEDGER_DIR/contributor-scores.txt"
-            echo "$name $chars" >> "$LEDGER_DIR/contributor-rank-data.txt"
+            chars=$(git log --author="$email" --pretty=tformat: --numstat | awk '{add+=$1} END {print add}') || true
+            name=$(git log --author="$email" --pretty="%aN" | head -n 1) || true
+            printf "%-25s — %10d chars\n" "$name <$email>" "$chars" >> "$LEDGER_DIR/contributor-scores.txt" || true
+            echo "$name $chars" >> "$LEDGER_DIR/contributor-rank-data.txt" || true
           done
+
           if [ -s "$LEDGER_DIR/contributor-rank-data.txt" ]; then
             cd "$LEDGER_DIR"
             sort -k2 -nr contributor-rank-data.txt > rank-sorted.txt
@@ -99,7 +104,7 @@ jobs:
                   set style fill solid; \
                   set ylabel 'Characters Added'; \
                   set xtics rotate by -25; \
-                  plot 'rank-sorted.txt' using 2:xtic(1) title 'Char Count'" | gnuplot
+                  plot 'rank-sorted.txt' using 2:xtic(1) title 'Char Count'" | gnuplot || true
           fi
 
       # ---------------------------------------------------------
@@ -161,8 +166,8 @@ jobs:
         shell: bash
         run: |
           GOOS=$(echo "${{ matrix.os }}" | cut -d'-' -f1)
-          TAG="snapshot-${GOOS}-v3.7-${{ github.run_number }}"
-          TITLE="Go-like-Rust v3.7 — $(echo $GOOS | tr '[:lower:]' '[:upper:]') Release Snapshot"
+          TAG="snapshot-${GOOS}-v3.8-${{ github.run_number }}"
+          TITLE="Go-like-Rust v3.8 — $(echo $GOOS | tr '[:lower:]' '[:upper:]') Release Snapshot"
           NOTES="Independent release for $GOOS — build completed at $(date -u)"
           echo "🌀 Creating $TITLE"
           gh release delete "$TAG" --yes || true
@@ -177,7 +182,7 @@ jobs:
       - name: 📦 Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gcrust-${{ matrix.os }}-v3.7-${{ github.run_number }}
+          name: gcrust-${{ matrix.os }}-v3.8-${{ github.run_number }}
           path: |
             $BUILD_DIR/
             $LEDGER_DIR/
