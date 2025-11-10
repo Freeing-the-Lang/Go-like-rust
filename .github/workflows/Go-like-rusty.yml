@@ -43,6 +43,7 @@ jobs:
           echo "🏗️ Building Go-like-Rust (Heap-Hop Edition) on ${{ matrix.os }} ..."
           echo "✅ Build complete on $(date -u)" > ledger/build-info-${{ matrix.os }}.txt
           echo "$(git config user.name) <$(git config user.email)> — built on ${{ matrix.os }}" > ledger/contributor-ledger-${{ matrix.os }}.txt
+
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum ledger/build-info-${{ matrix.os }}.txt > proof/sha256sum-${{ matrix.os }}.txt
           else
@@ -57,7 +58,7 @@ jobs:
           else
             zip -r go-like-rust-${{ matrix.os }}.zip build proof ledger
           fi
-        # 업로드를 위해 아티팩트로 저장
+
       - name: "⬆️ Upload Build Artifacts"
         uses: actions/upload-artifact@v4
         with:
@@ -76,6 +77,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
+          pattern: "*"
+          merge-multiple: true
 
       - name: "📘 Auto-update README (3OS Heap-Hop Edition)"
         shell: bash
@@ -106,7 +109,6 @@ jobs:
             ✅ 3OS 빌드 및 ProofLedger 자동 생성 버전  
             🔐 Ledger 및 SHA256 검증 포함  
             **All is heap, heap-hop.**
-          files: |
-            release-assets/**/*.zip
+          files: release-assets/**/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
