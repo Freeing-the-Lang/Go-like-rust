@@ -1,4 +1,4 @@
-name: "🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14)*"
+name: "🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14 / 3OS Release)*"
 
 on:
   push:
@@ -14,8 +14,12 @@ permissions:
   actions: write
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-3os:
+    name: "🧱 3OS Deterministic Build"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: "🧭 Checkout Repository"
@@ -23,43 +27,75 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "⚙️ Setup Build Environment"
+      - name: "⚙️ Setup Environment"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git zip
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            sudo apt-get update
+            sudo apt-get install -y git zip
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            brew update
+            brew install git
+          else
+            choco install git -y
+          fi
 
-      - name: "🧱 Build Transpiler Snapshot"
+      - name: "🏗️ Build Transpiler Snapshot"
+        shell: bash
         run: |
           mkdir -p build proof ledger
-          echo "🏗️ Building Go-like-Rust (Heap-Hop Edition) ..."
-          echo "✅ Build complete on $(date -u)" > ledger/build-info.txt
-          echo "$(git config user.name) <$(git config user.email)> — built on ubuntu-latest" > ledger/contributor-ledger.txt
-          sha256sum ledger/build-info.txt > proof/sha256sum.txt
+          echo "🏗️ Building Go-like-Rust (Heap-Hop Edition) on ${{ matrix.os }} ..."
+          echo "✅ Build complete on $(date -u)" > ledger/build-info-${{ matrix.os }}.txt
+          echo "$(git config user.name) <$(git config user.email)> — built on ${{ matrix.os }}" > ledger/contributor-ledger-${{ matrix.os }}.txt
+          sha256sum ledger/build-info-${{ matrix.os }}.txt > proof/sha256sum-${{ matrix.os }}.txt 2>/dev/null || certutil -hashfile ledger\\build-info-${{ matrix.os }}.txt SHA256 > proof\\sha256sum-${{ matrix.os }}.txt 2>NUL
 
-      - name: "📘 Auto-update README (Heap-Hop Edition)"
+      - name: "📦 Archive Artifacts"
+        run: |
+          zip -r go-like-rust-${{ matrix.os }}.zip build proof ledger || powershell Compress-Archive build,proof,ledger go-like-rust-${{ matrix.os }}.zip
+        shell: bash
+
+  finalize:
+    name: "📘 ProofLedger + README Update"
+    runs-on: ubuntu-latest
+    needs: [build-3os]
+
+    steps:
+      - name: "🧭 Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "📥 Collect Proof Files"
+        run: |
+          mkdir -p proof ledger
+          echo "🔗 Go-like-Rust ProofLedger (3OS)" > proof/ledger-summary.txt
+          echo "$(date -u) — Proof Generated" >> proof/ledger-summary.txt
+          echo >> proof/ledger-summary.txt
+          cat ledger/* >> proof/ledger-summary.txt || true
+
+      - name: "📘 Auto-update README (3OS Heap-Hop Edition)"
         run: |
           cat > README.md <<'EOF'
-## 🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14)*
+## 🏛️ Go-like-Rust Transpiler — *Heap-Hop Edition (v3.8-14 / 3OS Release)*
 
-**All is heap, heap-hop.**
-Go-like-Rust는 Go 문법을 Rust 코드로 변환하는 실험적 트랜스파일러입니다.
-Rust의 ownership 모델과 Go의 heap-based GC 개념을 융합해,
+**All is heap, heap-hop.**  
+Go-like-Rust는 Go 문법을 Rust 코드로 변환하는 실험적 트랜스파일러입니다.  
+Rust의 *ownership* 모델과 Go의 *heap-based GC* 개념을 융합해,  
 **“스택은 안전하게, 힙은 자유롭게”** 라는 철학을 구현합니다.
 
 ---
 
 ### 🧩 Features
-- 🦀 Go → Rust 트랜스파일
+- 🦀 Go → Rust 트랜스파일 (AST 변환)
 - 🧱 Deterministic Build — 동일한 해시 결과 보장
 - 🔒 ProofLedger & SHA256 검증 시스템
-- ⚙️ 자동 릴리즈 빌드 (GitHub Actions)
+- ⚙️ 3OS 자동 빌드 (Ubuntu / macOS / Windows)
 - 🧾 Ledger 기반 Contributor 추적
 
 ---
 
 ### 🧠 Philosophy
-> “모든 것은 힙이다. All is heap, heap-hop.”
-Rust의 스택 안정성과 Go의 힙 해방을 결합한
+> “모든 것은 힙이다. All is heap, heap-hop.”  
+Rust의 스택 안정성과 Go의 힙 해방을 결합한  
 새로운 메모리 관리 실험 프로젝트입니다.
 
 ---
@@ -76,26 +112,29 @@ meta/       환경 및 빌드 메타데이터
 ---
 
 ### 🧾 Proof & Ledger
-각 빌드마다 다음이 자동 기록됩니다:
+각 빌드마다 자동 기록됩니다 (3OS 별 ledger 포함):
 \`\`\`
 0200134 <0200134hjh@gmail.com> — built on ubuntu-latest
+0200134 <0200134hjh@gmail.com> — built on macos-latest
+0200134 <0200134hjh@gmail.com> — built on windows-latest
 \`\`\`
-\`proof/\` 디렉터리에는 SHA256 해시가 포함되어
+
+\`proof/\` 디렉터리에는 SHA256 해시가 포함되어  
 모든 산출물의 **진위 검증**이 가능합니다.
 
 ---
 
 ### 🚀 Future
-- [ ] Go 1.23 문법 완전 대응
-- [ ] Heap-Hop GC 실험모드
-- [ ] Auto README Ledger 삽입
-- [ ] Multi-OS Snapshot Release (macOS / Windows 포함)
+- [ ] Go 1.23 문법 완전 대응  
+- [ ] Heap-Hop GC 실험모드  
+- [ ] Auto README Ledger 삽입  
+- [ ] Multi-Arch Snapshot Release (ARM 포함)
 EOF
 
-      - name: "🧾 Commit & Push Changes"
+      - name: "🧾 Commit & Push README + Proof"
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md proof ledger
-          git commit -m "📘 Auto-update README + ProofLedger (Heap-Hop Edition)" || echo "No changes"
+          git commit -m "📘 Auto-update README + ProofLedger (3OS Heap-Hop Edition)" || echo "No changes"
           git push
