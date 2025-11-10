@@ -46,11 +46,10 @@ jobs:
         run: |
           mkdir -p build transpiled proof ledger
           echo "⚙️ Translating Rust to Go-like heap-based code..."
-          # 실제 Rust→Go 변환기 위치 (시뮬레이션)
           if [ -f scripts/translate_rust_to_go.py ]; then
             python3 scripts/translate_rust_to_go.py src/ > transpiled/main.go
           else
-            cat > transpiled/main.go <<'EOF'
+cat > transpiled/main.go <<'EOF'
 package main
 
 import "fmt"
