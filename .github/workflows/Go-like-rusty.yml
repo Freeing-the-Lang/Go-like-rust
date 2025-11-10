@@ -1,4 +1,4 @@
-name: "🏛️ Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.7 / Go Executable Release)"
+name: "🏛️ Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.8 / Go Executable Release)"
 
 on:
   push:
@@ -6,16 +6,12 @@ on:
   pull_request:
     types: [ closed ]
   schedule:
-    - cron: "0 0 * * *"  # 매일 09:00 KST
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
   actions: write
-
-concurrency:
-  group: go-like-rust-heap-hop-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   build-3os:
@@ -33,23 +29,6 @@ jobs:
         with:
           go-version: "1.23"
 
-      - name: "🧠 Setup Python (for translator)"
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
-      - name: "📦 Install Dependencies"
-        shell: bash
-        run: |
-          echo "▶️ Setting up environment for ${{ matrix.os }}"
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get update && sudo apt-get install -y git zip diffutils
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            brew install git diffutils || true
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "Using preinstalled Git on Windows runner"
-          fi
-
       - name: "🏗️ Transpile Rust → Go (All is Heap Mode)"
         shell: bash
         run: |
@@ -60,24 +39,24 @@ jobs:
             bash -c '(python3 scripts/translate_rust_to_go.py src/ 2>/dev/null || python scripts/translate_rust_to_go.py src/) > transpiled/main.go'
           else
             cat > transpiled/main.go <<-'EOF'
-              package main
+	package main
 
-              import (
-                  "bufio"
-                  "fmt"
-                  "os"
-              )
+	import (
+		"bufio"
+		"fmt"
+		"os"
+	)
 
-              func main() {
-                  fmt.Println("🏛️ All is heap — Heap-Hop Edition running.")
-                  fmt.Println("Every value lives on the heap.")
-                  fmt.Println()
-                  fmt.Println("Press ENTER to exit (Heap-Hop).")
+	func main() {
+		fmt.Println("🏛️ All is heap — Heap-Hop Edition running.")
+		fmt.Println("Every value lives on the heap.")
+		fmt.Println()
+		fmt.Println("Press ENTER to exit (Heap-Hop).")
 
-                  reader := bufio.NewReader(os.Stdin)
-                  _, _ = reader.ReadBytes('\n')
-              }
-            EOF
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadBytes('\n')
+	}
+	EOF
           fi
           echo "✅ Transpilation complete — all heap variables, no stack life."
 
@@ -101,22 +80,6 @@ jobs:
           cd ..
           echo "✅ Build complete on $(date -u)" > ledger/build-info-${GOOS_NAME}.txt
           echo "$(git config user.name || echo 'unknown') <$(git config user.email || echo 'unknown')> — heap-built on ${GOOS_NAME}" > ledger/contributor-ledger-${GOOS_NAME}.txt
-
-      - name: "🧠 RustSpec Detection (record)"
-        shell: bash
-        run: |
-          mkdir -p proof
-          SYNC_DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
-          RUST_VERSION=$(rustc --version 2>/dev/null || echo "Rust not installed (heap-mode)")
-          echo "$RUST_VERSION" > proof/current_rust_version-${{ matrix.os }}.txt
-          {
-            echo ""
-            echo "---"
-            echo "🧩 Heap-Hop Auto Report (${{ matrix.os }})"
-            echo "Last Synced: $SYNC_DATE"
-            echo "RustSpec: $RUST_VERSION"
-            echo "Mode: All is Heap"
-          } >> README.md
 
       - name: "🔐 Generate SHA256 Proof"
         shell: bash
@@ -177,10 +140,10 @@ jobs:
       - name: "🚀 Create or Update Release"
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "heap-hop-v4.7"
+          tag_name: "heap-hop-v4.8"
           name: "Heap-Hop Edition — All is Heap Executable (Go-like Rust Transpiler)"
           body: |
-            🏛️ **Go-like-Rust Transpiler — All is Heap (v4.7)**  
+            🏛️ **Go-like-Rust Transpiler — All is Heap (v4.8)**  
             ✅ Rust → Go 기반 Heap 모드 실행파일 릴리즈  
             🦀 RustSpec 참조 + Heap-Hop Philosophy 반영  
             🔐 ProofLedger + SHA256 해시 포함  
