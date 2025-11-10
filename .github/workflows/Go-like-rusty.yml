@@ -1,4 +1,4 @@
-name: "🏛️ Go-like-Rust Transpiler — *All is Heap (Heap-Hop Edition v4.1 / Go Executable Release)*"
+name: '🏛️ Go-like-Rust Transpiler — *All is Heap (Heap-Hop Edition v4.1 / Go Executable Release)*'
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
     types: [ closed ]
   schedule:
-    - cron: "0 0 * * *"  # 09:00 KST
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -78,7 +78,6 @@ EOF
           set -euo pipefail
           cd transpiled
 
-          # Normalize GOOS label for naming; build for native runner
           case "${RUNNER_OS}" in
             Linux)  GOOS_NAME="linux" ;;
             macOS)  GOOS_NAME="darwin" ;;
@@ -106,7 +105,7 @@ EOF
           RUST_VERSION=$( (rustc --version 2>/dev/null) || echo "Rust not installed (heap-mode)" )
           echo "$RUST_VERSION" > "proof/current_rust_version-${{ matrix.os }}.txt"
           {
-            echo "### Heap-Hop Auto-Report (${ { matrix.os }})"
+            echo "### Heap-Hop Auto-Report (${{ matrix.os }})"
             echo "- Last Synced: $SYNC_DATE"
             echo "- Detected RustSpec: $RUST_VERSION"
             echo "- Mode: All is Heap (Go Executable)"
@@ -187,13 +186,11 @@ EOF
         run: |
           set -euo pipefail
           mkdir -p proof ledger
-          # Merge proof/ledger from both raw artifacts and unzipped staging
           rsync -a --ignore-existing release-assets/proof/ proof/ || true
           rsync -a --ignore-existing release-assets/ledger/ ledger/ || true
           rsync -a staging/proof/ proof/ || true
           rsync -a staging/ledger/ ledger/ || true
 
-          # Build consolidated README fragment
           {
             echo ""
             echo "---"
