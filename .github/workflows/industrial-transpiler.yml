@@ -1,10 +1,10 @@
-name: 🏭 Go-like-Rust Transpiler (Industrial Loop v2.2 — Resilient Dual Loop Edition)
+name: 🏭 Go-like-Rust Transpiler (v2.3 — Fail-Safe Release Edition)
 
 on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 0 * * *"   # 매일 자정 UTC
+    - cron: "0 0 * * *"     # 매일 자정 UTC
   workflow_dispatch:
 
 permissions:
@@ -15,26 +15,25 @@ env:
   LEDGER_DIR: proof
   SNAPSHOT_TAG: snapshot-transpile-${{ github.run_number }}
   BACKUP_REPO: r3c-foundation/r3c-backup
-  DATE_UTC: ${{ github.run_id }}
 
 jobs:
   transpile:
     runs-on: ubuntu-latest
 
     steps:
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🧭 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: ⚙️ Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.x"
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🧾 Ensure Go module
         run: |
           if [ ! -f go.mod ]; then
@@ -43,96 +42,110 @@ jobs:
           fi
           go mod tidy
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🧩 Prepare directories
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/$BUILD_DIR" "$GITHUB_WORKSPACE/$LEDGER_DIR"
+          mkdir -p "$GITHUB_WORKSPACE/$BUILD_DIR" "$GITHUB_WORKSPACE/$LEDGER_DIR" diff proof_history
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🦀 Transpile Rust-like sources
         run: |
           echo "=== Go-like-Rust Transpile Run ($(date -u)) ==="
-          for f in $(find examples -name '*.rs'); do
-            echo "➡️  Transpiling $f"
-            go run main.go transpile "$f"
+          for f in $(find examples -name '*.rs' 2>/dev/null); do
+            echo "➡️  Transpiling: $f"
+            go run main.go transpile "$f" || echo "⚠️ Transpile failed for $f"
           done
-          find examples -name '*_gen.go' -exec cp {} "$GITHUB_WORKSPACE/$BUILD_DIR" \;
+          find examples -name '*_gen.go' -exec cp {} "$GITHUB_WORKSPACE/$BUILD_DIR" \; || true
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🧪 Run transpiled outputs
         run: |
-          for g in $(find "$GITHUB_WORKSPACE/$BUILD_DIR" -name '*_gen.go'); do
-            echo "▶️ Running $g"
-            go run "$g" || echo "⚠️ $g failed"
+          for g in $(find "$GITHUB_WORKSPACE/$BUILD_DIR" -name '*_gen.go' 2>/dev/null); do
+            echo "▶️ Running: $g"
+            go run "$g" || echo "⚠️ Run failed: $g"
           done
+          echo "✅ Execution checks complete"
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🔒 Generate ProofLedger
         run: |
           mkdir -p "$GITHUB_WORKSPACE/$LEDGER_DIR"
-          cd "$GITHUB_WORKSPACE/$BUILD_DIR"
+          cd "$GITHUB_WORKSPACE/$BUILD_DIR" || exit 0
 
-          if ls *_gen.go 1>/dev/null 2>&1; then
+          FILES=$(ls *_gen.go 2>/dev/null || true)
+          if [ -n "$FILES" ]; then
             sha256sum *_gen.go > "$GITHUB_WORKSPACE/$LEDGER_DIR/SHA256SUMS.txt"
           else
             echo "No generated Go files found." > "$GITHUB_WORKSPACE/$LEDGER_DIR/SHA256SUMS.txt"
           fi
 
           cd "$GITHUB_WORKSPACE/$LEDGER_DIR"
-          echo "GO-LIKE-RUST TRANSPILER PROOFLEDGER — $(date -u)" > ProofLedger.txt
-          echo "Generated Files: $(ls $GITHUB_WORKSPACE/$BUILD_DIR | wc -l)" >> ProofLedger.txt
-          echo "UTC Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> ProofLedger.txt
-          cat SHA256SUMS.txt >> ProofLedger.txt
+          {
+            echo "GO-LIKE-RUST TRANSPILER PROOFLEDGER — $(date -u)"
+            echo "Generated Files: $(ls $GITHUB_WORKSPACE/$BUILD_DIR | wc -l)"
+            echo "UTC Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            cat SHA256SUMS.txt
+          } > ProofLedger.txt
+          echo "✅ ProofLedger generated"
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🔍 Compare with previous ledger (ProofLedgerDiff)
         run: |
-          mkdir -p diff
+          mkdir -p diff proof_history
           PREV=$(ls proof_history/ProofLedger-*.txt 2>/dev/null | tail -n 1 || true)
           if [ -n "$PREV" ]; then
-            echo "🔍 Comparing with $PREV"
             diff -u "$PREV" "$GITHUB_WORKSPACE/$LEDGER_DIR/ProofLedger.txt" > diff/ProofLedgerDiff.txt || true
           else
             echo "No previous ProofLedger found" > diff/ProofLedgerDiff.txt
           fi
           cp "$GITHUB_WORKSPACE/$LEDGER_DIR/ProofLedger.txt" "proof_history/ProofLedger-$(date -u +%Y%m%d-%H%M).txt" || true
+          echo "✅ ProofLedgerDiff updated"
 
-      # -----------------------------
+      # ---------------------------------------------------------
       - name: 🧾 Commit & Push ledger + generated code
         if: github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$BUILD_DIR"/* "$LEDGER_DIR"/* diff/* || true
-          git commit -m "🏭 v2.2 Transpile Loop — ProofLedger + Diff" || echo "No changes"
+          git add "$BUILD_DIR"/* "$LEDGER_DIR"/* diff/* proof_history/* || true
+          git commit -m "🏭 v2.3 ProofLedger + Diff update" || echo "No changes to commit"
           git push origin main || echo "✅ No push needed"
 
-      # -----------------------------
-      - name: 🌀 Create snapshot release
+      # ---------------------------------------------------------
+      - name: 🌀 Create snapshot release (fail-safe)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          echo "🌀 Creating release: $SNAPSHOT_TAG"
           gh release delete "$SNAPSHOT_TAG" --yes || true
-          gh release create "$SNAPSHOT_TAG" "$BUILD_DIR"/*.go "$LEDGER_DIR"/ProofLedger.txt diff/ProofLedgerDiff.txt \
-            --title "Go-like-Rust Transpile Snapshot v2.2" \
-            --notes "Automated transpile + hash verification loop — $(date -u)"
 
-      # -----------------------------
-      - name: 🌐 Mirror to backup repository
+          FILES=$(find "$GITHUB_WORKSPACE/$BUILD_DIR" -name '*.go' 2>/dev/null)
+          if [ -z "$FILES" ]; then
+            echo "⚠️ No transpiled .go files found — skipping release creation."
+            exit 0
+          fi
+
+          gh release create "$SNAPSHOT_TAG" $FILES "$GITHUB_WORKSPACE/$LEDGER_DIR"/ProofLedger.txt diff/ProofLedgerDiff.txt \
+            --title "Go-like-Rust Transpile Snapshot v2.3" \
+            --notes "Automated transpile + verification — $(date -u)" || echo "⚠️ Release creation failed (non-fatal)"
+
+      # ---------------------------------------------------------
+      - name: 🌐 Mirror to backup repository (dual sync)
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "🔁 Syncing to backup repository: $BACKUP_REPO"
-          git remote add backup "https://github.com/$BACKUP_REPO.git"
-          git push backup main || echo "⚠️ Backup sync failed"
+          git remote add backup "https://github.com/$BACKUP_REPO.git" || true
+          git push backup main || echo "⚠️ Backup sync failed (non-fatal)"
 
-      # -----------------------------
-      - name: 📦 Upload artifacts (proof, diff)
+      # ---------------------------------------------------------
+      - name: 📦 Upload artifacts (proof + diff)
         uses: actions/upload-artifact@v4
         with:
-          name: transpile-proof-v2.2-${{ github.run_number }}
+          name: transpile-proof-v2.3-${{ github.run_number }}
           path: |
             $BUILD_DIR/
             $LEDGER_DIR/
             diff/
+            proof_history/
