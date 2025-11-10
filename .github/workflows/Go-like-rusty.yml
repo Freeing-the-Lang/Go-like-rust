@@ -1,4 +1,4 @@
-name: 🏛️ Go-like-Rust Transpiler (v3.6 — 3OS Stable Release + Auto README Update)
+name: 🏛️ Go-like-Rust Transpiler (v3.7 — 3OS Final Stable Release + Auto README Update)
 
 on:
   push:
@@ -23,17 +23,16 @@ jobs:
 
     steps:
       # ---------------------------------------------------------
-      - name: 🧭 Checkout repository (OS-safe)
+      - name: 🧭 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: false
 
-      - name: 🧹 Ensure Windows safe path (only Windows)
+      - name: 🧹 Ensure Windows safe path
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          git config --system core.longpaths true
+        run: git config --system core.longpaths true
 
       # ---------------------------------------------------------
       - name: ⚙️ Setup Go
@@ -41,7 +40,7 @@ jobs:
         with:
           go-version: "1.23.x"
 
-      - name: ⚙️ Prepare Environment
+      - name: ⚙️ Prepare environment
         shell: bash
         run: |
           mkdir -p "$BUILD_DIR" "$LEDGER_DIR"
@@ -78,7 +77,7 @@ jobs:
           echo "[$TIMESTAMP] $AUTHOR <$EMAIL> — built on ${{ matrix.os }}" >> "$LEDGER_DIR/contributor-ledger.txt"
 
       # ---------------------------------------------------------
-      - name: 📈 Contributor Stats (Linux only)
+      - name: 📈 Contributor stats (Linux only)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
@@ -104,7 +103,7 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      - name: 🥇 Extract Top3 Contributors (Linux only)
+      - name: 🥇 Extract Top3 contributors (Linux only)
         if: matrix.os == 'ubuntu-latest'
         id: top3
         shell: bash
@@ -162,8 +161,8 @@ jobs:
         shell: bash
         run: |
           GOOS=$(echo "${{ matrix.os }}" | cut -d'-' -f1)
-          TAG="snapshot-${GOOS}-v3.6-${{ github.run_number }}"
-          TITLE="Go-like-Rust v3.6 — ${GOOS^} Release Snapshot"
+          TAG="snapshot-${GOOS}-v3.7-${{ github.run_number }}"
+          TITLE="Go-like-Rust v3.7 — $(echo $GOOS | tr '[:lower:]' '[:upper:]') Release Snapshot"
           NOTES="Independent release for $GOOS — build completed at $(date -u)"
           echo "🌀 Creating $TITLE"
           gh release delete "$TAG" --yes || true
@@ -178,7 +177,7 @@ jobs:
       - name: 📦 Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gcrust-${{ matrix.os }}-v3.6-${{ github.run_number }}
+          name: gcrust-${{ matrix.os }}-v3.7-${{ github.run_number }}
           path: |
             $BUILD_DIR/
             $LEDGER_DIR/
