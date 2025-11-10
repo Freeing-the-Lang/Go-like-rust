@@ -71,6 +71,62 @@ jobs:
           fi
           echo "✅ Transpilation complete — all heap variables, no stack life."
 
+      - name: "🔨 Build Go Executable"
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          cd transpiled
+          case "${RUNNER_OS}" in
+            Linux)   GOOS_NAME="linux"   ;;
+            macOS)   GOOS_NAME="darwin"  ;;
+            Windows) GOOS_NAME="windows" ;;
+            *)       GOOS_NAME="generic" ;;
+          esac
+
+          OUT="../build/go_like_rust_${GOOS_NAME}"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${OUT}.exe" main.go
+          else
+            go build -trimpath -buildvcs=false -ldflags="-s -w" -o "${OUT}" main.go
+          fi
+          cd ..
+          date -u +"✅ Build complete on %Y-%m-%dT%H:%M:%SZ" > ledger/build-info-${GOOS_NAME}.txt
+          printf "%s\n" "$(git config user.name || echo 'unknown') <$(git config user.email || echo 'unknown')> — heap-built on ${GOOS_NAME}" > ledger/contributor-ledger-${GOOS_NAME}.txt
+
+      - name: "🔐 Generate SHA256 Proof"
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sha256sum build/* > "proof/sha256sum-${{ matrix.os }}.txt"
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            for f in build/*; do shasum -a 256 "$f"; done > "proof/sha256sum-${{ matrix.os }}.txt"
+          else
+            pwsh -NoLogo -NoProfile -Command 'Get-ChildItem build | ForEach-Object { $h = Get-FileHash $_.FullName -Algorithm SHA256; "$($h.Hash)  $($_.Name)" }' > "proof/sha256sum-${{ matrix.os }}.txt"
+          fi
+
+      - name: "📦 Archive Artifacts"
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="go-like-rust-${{ matrix.os }}.zip"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            pwsh -NoLogo -NoProfile -Command "Compress-Archive -Path build,proof,ledger,transpiled -DestinationPath '$ZIP' -Force"
+          else
+            zip -rq "$ZIP" build proof ledger transpiled
+          fi
+
+      - name: "⬆️ Upload Build Artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-like-rust-${{ matrix.os }}
+          path: go-like-rust-${{ matrix.os }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
   finalize:
     runs-on: ubuntu-latest
     needs: build-3os
@@ -88,9 +144,26 @@ jobs:
           pattern: "*"
           merge-multiple: true
 
+      - name: "📦 Extract proof/ledger from artifacts"
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p proof ledger
+          shopt -s nullglob
+          for z in release-assets/*.zip; do
+            tmpdir=$(mktemp -d)
+            unzip -q "$z" "proof/*" "ledger/*" -d "$tmpdir" || true
+            if [ -d "$tmpdir/proof" ];  then rsync -a "$tmpdir/proof/"  proof/;  fi
+            if [ -d "$tmpdir/ledger" ]; then rsync -a "$tmpdir/ledger/" ledger/; fi
+            rm -rf "$tmpdir"
+          done
+          echo "::group::Proof files"; ls -l proof || true; echo "::endgroup::"
+          echo "::group::Ledger files"; ls -l ledger || true; echo "::endgroup::"
+
       - name: "🧾 Commit & Push README + ProofLedger"
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase || true
@@ -98,8 +171,8 @@ jobs:
           echo "### 🌍 Main Branch Open" >> README.md
           echo "본 프로젝트의 main 브랜치는 오픈 상태이며, 누구나 PR 또는 Issue로 기여할 수 있습니다." >> README.md
           echo "" >> README.md
-          git add README.md
-          git commit -m "🔓 Main branch open notice — Contributions welcome" || echo "No changes"
+          git add README.md proof ledger || true
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "🔓 Main branch open notice — Contributions welcome + Proof/Ledger sync"
           git push
 
       - name: "🚀 Create or Update Release"
@@ -118,5 +191,6 @@ jobs:
             ---
             🔓 **Main branch is open.**
             누구나 PR 또는 Issue를 통해 기여 가능합니다.
+          files: release-assets/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
