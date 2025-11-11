@@ -1,4 +1,4 @@
-name: "Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.10.2 / Go Executable Release)"
+name: "Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.10.3 / Go Executable Release)"
 
 on:
   push:
@@ -67,7 +67,11 @@ jobs:
             echo "No transpiler found — creating fallback Go file."
             cat > transpiled/main.go <<'EOF'
 package main
-import ("bufio"; "fmt"; "os")
+import (
+  "bufio"
+  "fmt"
+  "os"
+)
 func main() {
   fmt.Println("All is heap — Heap-Hop Edition running.")
   fmt.Println("Every value lives on the heap.")
@@ -98,7 +102,11 @@ EOF
               Write-Host "Python not found — fallback Go file."
               @'
 package main
-import ("bufio"; "fmt"; "os")
+import (
+  "bufio"
+  "fmt"
+  "os"
+)
 func main() {
   fmt.Println("All is heap — Heap-Hop Edition running.")
   fmt.Println("Every value lives on the heap.")
@@ -112,7 +120,11 @@ func main() {
             Write-Host "No transpiler found — creating fallback Go file."
             @'
 package main
-import ("bufio"; "fmt"; "os")
+import (
+  "bufio"
+  "fmt"
+  "os"
+)
 func main() {
   fmt.Println("All is heap — Heap-Hop Edition running.")
   fmt.Println("Every value lives on the heap.")
@@ -232,11 +244,11 @@ func main() {
           tag_name: heap-hop-${{ github.run_number }}-${{ steps.dates.outputs.utc_date }}
           name: "Heap-Hop Edition — All is Heap Executable (Go-like Rust Transpiler)"
           body: |
-            Go-like-Rust Transpiler — All is Heap (v4.10.2)
+            Go-like-Rust Transpiler — All is Heap (v4.10.3)
             ✅ Rust → Go heap mode executable release
             🔐 ProofLedger + SHA256 verification
             ⚙️ Everything lives on the heap.
           files: release-assets/*.zip
-          allowUpdates: true        # ✅ 릴리스 갱신 허용
+          allowUpdates: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
