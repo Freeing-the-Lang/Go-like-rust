@@ -53,7 +53,9 @@ jobs:
           # .python-version 파일을 찾는 대신 3.11로 버전을 고정합니다.
           # 이렇게 하면 fallback-python-version 오류와 .python-version 파일 없음 오류가 모두 해결됩니다.
           python-version: '3.11'
-          cache: 'pip'
+          # 'cache: 'pip''를 제거합니다.
+          # 이 설정은 requirements.txt 또는 pyproject.toml 파일이 *반드시* 존재해야 하므로,
+          # 해당 파일이 선택 사항인 이 워크플로에서는 오류를 유발합니다.
 
       # --- 🚀 IMPROVEMENT 2: Install Python Dependencies ---
       - name: Install Python Dependencies (if any)
