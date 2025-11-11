@@ -50,9 +50,9 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          # .python-version 파일이 있으면 사용하고, 없으면 3.11 사용
-          python-version-file: '.python-version'
-          fallback-python-version: '3.11'
+          # .python-version 파일을 찾는 대신 3.11로 버전을 고정합니다.
+          # 이렇게 하면 fallback-python-version 오류와 .python-version 파일 없음 오류가 모두 해결됩니다.
+          python-version: '3.11'
           cache: 'pip'
 
       # --- 🚀 IMPROVEMENT 2: Install Python Dependencies ---
