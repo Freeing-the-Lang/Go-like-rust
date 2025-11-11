@@ -49,3 +49,6 @@ _(This list is automatically updated by CI)_
 
 #### sha256sum-windows-latest.txt
     A176DA249D54CA851D674B2DFC5A4817C76FFE6B2D0241BB0F2D0B678270AB06  go_like_rust_windows.exe
+
+### Main Branch Open
+The main branch is open for contributions via PR or Issues.
