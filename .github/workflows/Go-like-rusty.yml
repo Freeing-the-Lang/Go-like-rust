@@ -119,7 +119,11 @@ EOF
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             pwsh -NoLogo -NoProfile -Command 'Get-ChildItem build | ForEach-Object { $h = Get-FileHash $_.FullName -Algorithm SHA256; "$($h.Hash)  $($_.Name)" }' | Sort-Object > "proof/sha256sum-${{ matrix.os }}.txt"
           else
-            find build -type f -exec shasum -a 256 "{}" \; | sort > "proof/sha256sum-${{ matrix.os }}.txt"
+            if command -v sha256sum >/dev/null 2>&1; then
+              find build -type f -print0 | xargs -0 sha256sum | sort > "proof/sha256sum-${{ matrix.os }}.txt"
+            else
+              find build -type f -exec shasum -a 256 "{}" \; | sort > "proof/sha256sum-${{ matrix.os }}.txt"
+            fi
           fi
 
       - name: Archive Artifacts
@@ -163,11 +167,12 @@ EOF
         run: |
           set -euo pipefail
           mkdir -p proof ledger
+          shopt -s nullglob
           for z in release-assets/*.zip; do
             tmpdir=$(mktemp -d)
             unzip -q "$z" "proof/*" "ledger/*" -d "$tmpdir" || true
-            if [ -d "$tmpdir/proof" ]; then rsync -a "$tmpdir/proof/" proof/; fi
-            if [ -d "$tmpdir/ledger" ]; then rsync -a "$tmpdir/ledger/" ledger/; fi
+            if [ -d "$tmpdir/proof" ]; then cp -R "$tmpdir/proof/"* proof/ 2>/dev/null || true; fi
+            if [ -d "$tmpdir/ledger" ]; then cp -R "$tmpdir/ledger/"* ledger/ 2>/dev/null || true; fi
             rm -rf "$tmpdir"
           done
 
@@ -179,9 +184,11 @@ EOF
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase || true
           if ! grep -q "### Main Branch Open" README.md; then
-            echo "" >> README.md
-            echo "### Main Branch Open" >> README.md
-            echo "The main branch is open for contributions via PR or Issues." >> README.md
+            {
+              echo ""
+              echo "### Main Branch Open"
+              echo "The main branch is open for contributions via PR or Issues."
+            } >> README.md
           fi
           git add README.md proof ledger || true
           git diff --cached --quiet || git commit -m "Main branch open notice + Proof/Ledger sync"
