@@ -1,4 +1,4 @@
-Name: "Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.10.5 / Go Executable Release)"
+name: "Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.10.5 / Go Executable Release)"
 
 on:
   push:
