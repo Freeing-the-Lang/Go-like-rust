@@ -52,7 +52,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      # Transpile (Linux/macOS)
+      # Transpile (Unix)
       - name: Transpile Rust to Go (unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -261,10 +261,16 @@ func main() {
           git diff --cached --quiet || git commit -m "Main branch open notice + Proof/Ledger sync"
           git push
 
+      # 🔧 GitHub Actions에서는 $(date ...) 같은 셸 치환이 inputs에서 동작하지 않는다. 날짜를 미리 계산해 출력값으로 넘긴다.
+      - name: Compute date for tag
+        id: dates
+        shell: bash
+        run: echo "utc_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: heap-hop-${{ github.run_number }}-$(date +'%Y%m%d')
+          tag_name: heap-hop-${{ github.run_number }}-${{ steps.dates.outputs.utc_date }}
           name: "Heap-Hop Edition — All is Heap Executable (Go-like Rust Transpiler)"
           body: |
             Go-like-Rust Transpiler — All is Heap (v4.10)
