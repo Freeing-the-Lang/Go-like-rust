@@ -1,4 +1,4 @@
-name: "Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.10 / Go Executable Release)"
+name: "Go-like-Rust Transpiler — All is Heap (Heap-Hop Edition v4.10.1 / Go Executable Release)"
 
 on:
   push:
@@ -67,20 +67,13 @@ jobs:
             echo "No transpiler found — creating fallback Go file."
             cat > transpiled/main.go <<'EOF'
 package main
-
-import (
-	"bufio"
-	"fmt"
-	"os"
-)
-
+import ("bufio"; "fmt"; "os")
 func main() {
-	fmt.Println("All is heap — Heap-Hop Edition running.")
-	fmt.Println("Every value lives on the heap.")
-	fmt.Println("Press ENTER to exit.")
-
-	reader := bufio.NewReader(os.Stdin)
-	_, _ = reader.ReadBytes('\n')
+  fmt.Println("All is heap — Heap-Hop Edition running.")
+  fmt.Println("Every value lives on the heap.")
+  fmt.Println("Press ENTER to exit.")
+  reader := bufio.NewReader(os.Stdin)
+  _, _ = reader.ReadBytes('\n')
 }
 EOF
           fi
@@ -100,25 +93,18 @@ EOF
             $py = Get-Command python -ErrorAction SilentlyContinue
             if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
             if ($py) {
-              & $py.Source "scripts/translate_rust_to_go.py" "src/" | Out-File -FilePath "transpiled/main.go" -Encoding ascii
+              & $py.Path "scripts/translate_rust_to_go.py" "src/" | Out-File -FilePath "transpiled/main.go" -Encoding ascii
             } else {
               Write-Host "Python not found — fallback Go file."
               @'
 package main
-
-import (
-	"bufio"
-	"fmt"
-	"os"
-)
-
+import ("bufio"; "fmt"; "os")
 func main() {
-	fmt.Println("All is heap — Heap-Hop Edition running.")
-	fmt.Println("Every value lives on the heap.")
-	fmt.Println("Press ENTER to exit.")
-
-	reader := bufio.NewReader(os.Stdin)
-	_, _ = reader.ReadBytes('\n')
+  fmt.Println("All is heap — Heap-Hop Edition running.")
+  fmt.Println("Every value lives on the heap.")
+  fmt.Println("Press ENTER to exit.")
+  reader := bufio.NewReader(os.Stdin)
+  _, _ = reader.ReadBytes('\n')
 }
 '@ | Out-File -FilePath "transpiled/main.go" -Encoding ascii
             }
@@ -126,35 +112,26 @@ func main() {
             Write-Host "No transpiler found — creating fallback Go file."
             @'
 package main
-
-import (
-	"bufio"
-	"fmt"
-	"os"
-)
-
+import ("bufio"; "fmt"; "os")
 func main() {
-	fmt.Println("All is heap — Heap-Hop Edition running.")
-	fmt.Println("Every value lives on the heap.")
-	fmt.Println("Press ENTER to exit.")
-
-	reader := bufio.NewReader(os.Stdin)
-	_, _ = reader.ReadBytes('\n')
+  fmt.Println("All is heap — Heap-Hop Edition running.")
+  fmt.Println("Every value lives on the heap.")
+  fmt.Println("Press ENTER to exit.")
+  reader := bufio.NewReader(os.Stdin)
+  _, _ = reader.ReadBytes('\n')
 }
 '@ | Out-File -FilePath "transpiled/main.go" -Encoding ascii
           }
           Write-Host "✅ Transpilation complete."
 
-      - name: Build Go Executable (Unix)
-        if: runner.os != 'Windows'
+      - name: Build Go Executable
         shell: bash
-        env:
-          CGO_ENABLED: "0"
         run: |
           set -euo pipefail
           cd transpiled
           GOOS_NAME=$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')
           OUT="../build/go_like_rust_${GOOS_NAME}"
+          [[ "$RUNNER_OS" == "Windows" ]] && OUT="${OUT}.exe"
           go build -trimpath -ldflags="-s -w" -o "${OUT}" main.go
           cd ..
           {
@@ -162,18 +139,6 @@ func main() {
             echo "Commit Hash: $(git rev-parse HEAD)"
             echo "Runner OS: ${RUNNER_OS}"
           } > ledger/build-info-${GOOS_NAME}.txt
-
-      - name: Build Go Executable (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          cd transpiled
-          go build -trimpath -ldflags="-s -w" -o "../build/go_like_rust_windows.exe" main.go
-          cd ..
-          Get-Date -Format "u" | Out-File "ledger/build-info-windows.txt"
-          "Commit Hash: $(git rev-parse HEAD)" | Out-File -Append "ledger/build-info-windows.txt"
 
       - name: Generate SHA256 Proof
         shell: bash
@@ -183,21 +148,15 @@ func main() {
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             pwsh -NoLogo -NoProfile -Command 'Get-ChildItem build | ForEach-Object { $h = Get-FileHash $_.FullName -Algorithm SHA256; "$($h.Hash)  $($_.Name)" }' | Sort-Object > "proof/sha256sum-${{ matrix.os }}.txt"
           else
-            if command -v sha256sum >/dev/null 2>&1; then
-              find build -type f -print0 | xargs -0 sha256sum | sort > "proof/sha256sum-${{ matrix.os }}.txt"
-            else
-              find build -type f -exec shasum -a 256 "{}" \; | sort > "proof/sha256sum-${{ matrix.os }}.txt"
-            fi
-          fi
-          if [ ! -s proof/sha256sum-${{ matrix.os }}.txt ]; then
-            echo "⚠️ Warning: No proof generated for ${{ matrix.os }}."
+            find build -type f -print0 | xargs -0 sha256sum | sort > "proof/sha256sum-${{ matrix.os }}.txt"
           fi
 
       - name: Archive Artifacts
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="go-like-rust-${{ matrix.os }}.zip"
+          mkdir -p release-assets
+          ZIP="release-assets/go-like-rust-${{ matrix.os }}.zip"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             pwsh -NoLogo -NoProfile -Command "Compress-Archive -Path build,proof,ledger,transpiled -DestinationPath '$ZIP' -Force"
           else
@@ -207,8 +166,8 @@ func main() {
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: go-like-rust-${{ matrix.os }}
-          path: go-like-rust-${{ matrix.os }}.zip
+          name: go-like-rust-${{ matrix.os }}-${{ github.run_id }}
+          path: release-assets/go-like-rust-${{ matrix.os }}.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -234,19 +193,16 @@ func main() {
         run: |
           set -euo pipefail
           mkdir -p proof ledger
-          shopt -s nullglob
           for z in release-assets/*.zip; do
-            tmpdir=$(mktemp -d)
-            unzip -q "$z" "proof/*" "ledger/*" -d "$tmpdir" || true
-            [ -d "$tmpdir/proof" ] && cp -R "$tmpdir/proof/"* proof/ 2>/dev/null || true
-            [ -d "$tmpdir/ledger" ] && cp -R "$tmpdir/ledger/"* ledger/ 2>/dev/null || true
-            rm -rf "$tmpdir"
+            unzip -q "$z" "proof/*" "ledger/*" -d tmp || true
+            cp -R tmp/proof/* proof/ 2>/dev/null || true
+            cp -R tmp/ledger/* ledger/ 2>/dev/null || true
+            rm -rf tmp
           done
 
       - name: Commit & Push ProofLedger
         shell: bash
         run: |
-          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git pull --rebase || true
@@ -261,7 +217,6 @@ func main() {
           git diff --cached --quiet || git commit -m "Main branch open notice + Proof/Ledger sync"
           git push
 
-      # 🔧 GitHub Actions에서는 $(date ...) 같은 셸 치환이 inputs에서 동작하지 않는다. 날짜를 미리 계산해 출력값으로 넘긴다.
       - name: Compute date for tag
         id: dates
         shell: bash
@@ -273,7 +228,7 @@ func main() {
           tag_name: heap-hop-${{ github.run_number }}-${{ steps.dates.outputs.utc_date }}
           name: "Heap-Hop Edition — All is Heap Executable (Go-like Rust Transpiler)"
           body: |
-            Go-like-Rust Transpiler — All is Heap (v4.10)
+            Go-like-Rust Transpiler — All is Heap (v4.10.1)
             ✅ Rust → Go heap mode executable release
             🔐 ProofLedger + SHA256 verification
             ⚙️ Everything lives on the heap.
