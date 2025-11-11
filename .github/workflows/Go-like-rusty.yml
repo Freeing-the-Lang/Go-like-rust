@@ -65,24 +65,23 @@ jobs:
             (python3 scripts/translate_rust_to_go.py src/ 2>/dev/null || python scripts/translate_rust_to_go.py src/) > transpiled/main.go
           else
             echo "No transpiler found — creating fallback Go file."
-            cat > transpiled/main.go <<'EOF'
-package main
-
-import (
-	"bufio"
-	"fmt"
-	"os"
-)
-
-func main() {
-	fmt.Println("All is heap — Heap-Hop Edition running.")
-	fmt.Println("Every value lives on the heap.")
-	fmt.Println("Press ENTER to exit.")
-
-	reader := bufio.NewReader(os.Stdin)
-	_, _ = reader.ReadBytes('\n')
-}
-EOF
+            printf '%s\n' \
+'package main' \
+'' \
+'import (' \
+'	"bufio"' \
+'	"fmt"' \
+'	"os"' \
+')' \
+'' \
+'func main() {' \
+'	fmt.Println("All is heap — Heap-Hop Edition running.")' \
+'	fmt.Println("Every value lives on the heap.")' \
+'	fmt.Println("Press ENTER to exit.")' \
+'' \
+'	reader := bufio.NewReader(os.Stdin)' \
+'	_, _ = reader.ReadBytes('\''\n'\'')' \
+'}' > transpiled/main.go
           fi
           echo "Transpilation complete."
 
