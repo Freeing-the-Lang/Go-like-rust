@@ -62,24 +62,25 @@ jobs:
             (python3 scripts/translate_rust_to_go.py src/ 2>/dev/null || python scripts/translate_rust_to_go.py src/) > transpiled/main.go
           else
             echo "⚠️ No transpiler found — using fallback demo Go file."
-            printf '%s\n' \
-'package main' \
-'' \
-'import (' \
-'	"bufio"' \
-'	"fmt"' \
-'	"os"' \
-')' \
-'' \
-'func main() {' \
-'	fmt.Println("🏛️ All is heap — Heap-Hop Edition running.")' \
-'	fmt.Println("Every value lives on the heap.")' \
-'	fmt.Println()' \
-'	fmt.Println("Press ENTER to exit (Heap-Hop).")' \
-'' \
-'	reader := bufio.NewReader(os.Stdin)' \
-"	_, _ = reader.ReadBytes('\n')" \
-'}' > transpiled/main.go
+            cat > transpiled/main.go <<'EOF'
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	fmt.Println("🏛️ All is heap — Heap-Hop Edition running.")
+	fmt.Println("Every value lives on the heap.")
+	fmt.Println()
+	fmt.Println("Press ENTER to exit (Heap-Hop).")
+
+	reader := bufio.NewReader(os.Stdin)
+	_, _ = reader.ReadBytes('\n')
+}
+EOF
           fi
           echo "✅ Transpilation complete — heap-only structure established."
 
