@@ -1,4 +1,4 @@
 Version: v4.10.5
-Build Time (UTC): 2025-11-12T00:46:55Z
-Commit Hash: 03d4a7f8bb543585602c945c29a79654b91ce54c
+Build Time (UTC): 2025-11-13T00:46:24Z
+Commit Hash: 9945a0f28bda57f5ecf07fdf2504ea78d7de1071
 Runner OS: Windows
