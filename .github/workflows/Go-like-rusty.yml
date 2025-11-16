@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  APP_VERSION: "v4.10.5"
+  APP_VERSION: "v4.10.6"
 
 permissions:
   contents: read
@@ -21,9 +21,6 @@ jobs:
   build-3os:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-
-    permissions:
-      contents: read
 
     strategy:
       matrix:
@@ -56,13 +53,10 @@ jobs:
           if [ -f "requirements.txt" ]; then
             pip install -r requirements.txt
           else
-            echo "No Python deps."
+            echo "No Python dependencies."
           fi
 
-      # -------------------------
-      #   TRANSPILATION
-      # -------------------------
-      - name: Transpile Rust → Go(heap)
+      - name: Transpile Rust → Go
         run: |
           set -euo pipefail
           mkdir -p build transpiled proof ledger
@@ -77,12 +71,12 @@ jobs:
               GENERATED=true
               echo "🟢 Transpilation OK."
             else
-              echo "⚠️ Transpiler failed. Fallback Go used."
+              echo "⚠️ Transpiler failed, using fallback."
             fi
           fi
 
           if [ "$GENERATED" = false ]; then
-cat <<EOF > transpiled/main.go
+            cat << 'EOF' > transpiled/main.go
 package main
 import (
   "bufio"
@@ -98,9 +92,6 @@ func main() {
 EOF
           fi
 
-      # -------------------------
-      #   BUILD EXECUTABLE
-      # -------------------------
       - name: Build Go Executable
         run: |
           set -euo pipefail
@@ -113,7 +104,7 @@ EOF
             OUT="${OUT}.exe"
           fi
 
-          echo "🔨 Building ${GOOS_NAME}..."
+          echo "🔨 Building for ${GOOS_NAME}..."
           go build -trimpath -ldflags="-s -w" -o "${OUT}" main.go
 
           cd ..
@@ -121,14 +112,11 @@ EOF
           {
             echo "Version: ${{ env.APP_VERSION }}"
             date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
-            echo "Commit Hash: ${{ github.sha }}"
-            echo "Runner OS: ${{ runner.os }}"
+            echo "Commit: ${{ github.sha }}"
+            echo "OS: ${{ runner.os }}"
           } > ledger/build-info-${GOOS_NAME}.txt
 
-      # -------------------------
-      #   SHA256 PROOF
-      # -------------------------
-      - name: Generate SHA256 Proof
+      - name: SHA256 Proof
         run: |
           mkdir -p proof
           if command -v sha256sum >/dev/null 2>&1; then
@@ -137,22 +125,17 @@ EOF
             find build -type f -exec shasum -a 256 "{}" \; | sort > proof/sha256sum-${{ matrix.os }}.txt
           fi
 
-      # -------------------------
-      #   ARCHIVE ZIP
-      # -------------------------
-      - name: Archive Artifacts (zip / 7z fallback)
+      - name: Create ZIP (zip / 7z fallback)
         run: |
           mkdir -p release-assets
           ZIP="release-assets/go-like-rust-${{ matrix.os }}.zip"
 
           if command -v zip >/dev/null 2>&1; then
-            echo "Using zip..."
             zip -rq "$ZIP" build proof ledger transpiled
           elif command -v 7z >/dev/null 2>&1; then
-            echo "Using 7z..."
             7z a -tzip -r "$ZIP" ./build ./proof ./ledger ./transpiled > /dev/null
           else
-            echo "❌ No zip or 7z available"
+            echo "❌ No zip or 7z available."
             exit 1
           fi
 
@@ -163,14 +146,10 @@ EOF
           path: release-assets/go-like-rust-${{ matrix.os }}.zip
           retention-days: 3
 
-  # ======================================================
-  #              FINALIZE: RELEASE + LEDGER MERGE
-  # ======================================================
   finalize:
     name: Finalize Release
     runs-on: ubuntu-latest
     needs: build-3os
-
     permissions:
       contents: write
 
@@ -181,9 +160,9 @@ EOF
         with:
           path: release-assets
           pattern: "go-like-rust-*"
-          merge-multiple: true
+        merge-multiple: true
 
-      - name: Extract proof & ledger
+      - name: Extract Proof & Ledger
         run: |
           mkdir -p proof ledger
           for z in release-assets/*.zip; do
@@ -193,7 +172,7 @@ EOF
             rm -rf tmp
           done
 
-      - name: Commit Proof & Ledger (skip CI)
+      - name: Commit Proof/Ledger
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -208,18 +187,13 @@ EOF
             echo "No changes."
           fi
 
-      # -------------------------
-      #  RELEASE BODY GENERATOR
-      # -------------------------
       - name: Build Release Body
         id: release_notes
         run: |
           BODY="release_body.md"
 
           echo "Go-like-Rust — Heap-Hop Edition (${{ env.APP_VERSION }})" > $BODY
-          echo "Everything lives on the heap." >> $BODY
           echo "" >> $BODY
-
           echo "## 🔐 SHA256 Proof" >> $BODY
           echo '```' >> $BODY
           cat proof/sha256sum-*.txt >> $BODY
@@ -235,10 +209,7 @@ EOF
           cat $BODY >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # -------------------------
-      #        RELEASE
-      # -------------------------
-      - name: Create/Update Release
+      - name: Create / Update Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: heap-hop-${{ env.APP_VERSION }}
