@@ -1,91 +1,66 @@
 name: Go-like-Rust - Heap-Hop Build & Release
-#
-# This workflow automates the build, test (via SHA proof), and release
-# process for the "Go-like-Rust" project.
-# It transpiles Rust to Go (with a fallback), builds for 3 operating systems,
-# generates build provenance (ledger/proof), and publishes a GitHub Release.
 
 on:
-  # 1. Run on pushes to the main branch
   push:
     branches: [ main ]
-  # 2. Run on a schedule (daily at midnight UTC)
   schedule:
     - cron: "0 0 * * *"
-  # 3. Allow manual triggering from the GitHub Actions UI
   workflow_dispatch:
 
-# Environment variable for the application version, used across jobs
 env:
   APP_VERSION: "v4.10.6"
 
-# Permissions for the GITHUB_TOKEN
 permissions:
-  contents: read # Default read permission for checkout and build
+  contents: read
 
-# Concurrency settings to prevent multiple runs for the same ref
 concurrency:
   group: go-like-rust-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ====================================================================
-  # JOB 1: Build for macOS, Linux, and Windows
-  # ====================================================================
   build-3os:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
 
     strategy:
-      # Run for all 3 major OSes in parallel
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-      # Don't cancel other jobs in the matrix if one fails
       fail-fast: false
 
     defaults:
       run:
-        # Use bash for consistent scripting across all platforms
         shell: bash
 
     steps:
-      # --- 1. Checkout Code ---
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # Fetch only the latest commit
+          fetch-depth: 1
 
-      # --- 2. Setup Go Environment ---
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23"
           check-latest: true
-          cache: true # Enable Go build cache
+          cache: true
 
-      # --- 3. Setup Python Environment ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: 'pip' # Cache pip dependencies
 
-      # --- 4. Install Python Dependencies ---
       - name: Install Python Dependencies
         run: |
           if [ -f "requirements.txt" ]; then
-            echo "🐍 Installing Python dependencies from requirements.txt..."
             pip install -r requirements.txt
           else
-            echo "🤷 No Python requirements.txt found, skipping."
+            echo "No Python dependencies."
           fi
 
-      # --- 5. Transpile Rust to Go (with Fallback) ---
       - name: Transpile Rust → Go
         run: |
-          set -euo pipefail # Fail fast on errors or unset variables
+          set -euo pipefail
           mkdir -p build transpiled proof ledger
-
           TRANSPILER="scripts/translate_rust_to_go.py"
           GENERATED=false
 
@@ -99,11 +74,9 @@ jobs:
               echo "⚠️ Transpiler failed, using fallback."
             fi
           else
-            echo "🤷 Transpiler script not found, using fallback."
+            echo "Transpiler script not found, using fallback."
           fi
 
-          # Fallback: If transpilation fails or script is missing,
-          # create a simple "hello world" program so the build can proceed.
           if [ "$GENERATED" = false ]; then
             cat << 'EOF' > transpiled/main.go
 package main
@@ -121,28 +94,23 @@ func main() {
 EOF
           fi
 
-      # --- 6. Build Go Executable ---
       - name: Build Go Executable
         run: |
           set -euo pipefail
           cd transpiled
 
-          # Determine OS name for the binary (linux, darwin, windows)
           GOOS_NAME=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
           OUT="../build/go_like_rust_${GOOS_NAME}"
 
-          # Add .exe extension for Windows
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             OUT="${OUT}.exe"
           fi
 
           echo "🔨 Building for ${GOOS_NAME}..."
-          # Build a stripped, optimized binary
           go build -trimpath -ldflags="-s -w" -o "${OUT}" main.go
 
           cd ..
 
-          # Create the build ledger file
           {
             echo "Version: ${{ env.APP_VERSION }}"
             date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
@@ -150,101 +118,78 @@ EOF
             echo "OS: ${{ runner.os }}"
           } > ledger/build-info-${GOOS_NAME}.txt
 
-      # --- 7. Generate SHA256 Proof ---
       - name: SHA256 Proof
         run: |
           mkdir -p proof
-          # Use sha256sum (Linux) or shasum (macOS/Windows)
           if command -v sha256sum >/dev/null 2>&1; then
             find build -type f -print0 | xargs -0 sha256sum | sort > proof/sha256sum-${{ matrix.os }}.txt
           else
             find build -type f -exec shasum -a 256 "{}" \; | sort > proof/sha256sum-${{ matrix.os }}.txt
           fi
 
-      # --- 8. Create ZIP Archive (with fallback) ---
       - name: Create ZIP (zip / 7z fallback)
         run: |
           mkdir -p release-assets
           ZIP="release-assets/go-like-rust-${{ matrix.os }}.zip"
 
-          # Package all build outputs
           if command -v zip >/dev/null 2>&1; then
             zip -rq "$ZIP" build proof ledger transpiled
           elif command -v 7z >/dev/null 2>&1; then
             7z a -tzip -r "$ZIP" ./build ./proof ./ledger ./transpiled > /dev/null
           else
-            echo "❌ No zip or 7z available. Cannot create archive."
+            echo "❌ No zip or 7z available."
             exit 1
           fi
 
-      # --- 9. Upload ZIP as Build Artifact ---
       - name: Upload ZIP Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-like-rust-${{ matrix.os }}-${{ github.run_id }}
           path: release-assets/go-like-rust-${{ matrix.os }}.zip
-          retention-days: 3 # Keep artifact for 3 days
+          retention-days: 3
 
-  # ====================================================================
-  # JOB 2: Finalize and Publish Release
-  # ====================================================================
   finalize:
     name: Finalize Release
     runs-on: ubuntu-latest
-    # This job depends on all 'build-3os' matrix jobs completing successfully
     needs: build-3os
-    
-    # Grant write permissions to 'contents' to allow creating a release
-    # and committing files back to the repo.
     permissions:
       contents: write
 
     steps:
-      # --- 1. Checkout Code (for committing) ---
       - uses: actions/checkout@v4
 
-      # --- 2. Download All Build Artifacts ---
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
-          # Download all artifacts matching this pattern
           pattern: "go-like-rust-*"
-          merge-multiple: true # Merge into a single directory
+          merge-multiple: true
 
-      # --- 3. Extract Proof & Ledger for Commit ---
       - name: Extract Proof & Ledger
         run: |
           mkdir -p proof ledger
-          # Unzip only the proof/ and ledger/ dirs from each downloaded zip
           for z in release-assets/*.zip; do
             unzip -qo "$z" "proof/*" "ledger/*" -d tmp || true
-            # Copy contents, ignoring errors if dirs don't exist
             cp -R tmp/proof/* proof/ 2>/dev/null || true
             cp -R tmp/ledger/* ledger/ 2>/dev/null || true
             rm -rf tmp
           done
 
-      # --- 4. Commit Proof/Ledger to Repository ---
       - name: Commit Proof/Ledger
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Pull just in case main was updated while job was running
           git pull --rebase --autostash || true
 
           git add proof ledger
-          # Check if there are any changes to commit
-          if ! git diff --cached --quiet; then
+          if ! git.diff --cached --quiet; then
             git commit -m "Proof/Ledger sync (${{ env.APP_VERSION }}) [skip ci]"
-            echo " pushing proof/ledger "
             git push
           else
-            echo "No changes to proof/ledger."
+            echo "No changes."
           fi
 
-      # --- 5. Build Dynamic Release Body ---
       - name: Build Release Body
         id: release_notes
         run: |
@@ -252,6 +197,7 @@ EOF
 
           echo "Go-like-Rust - Heap-Hop Edition (${{ env.APP_VERSION }})" > $BODY
           echo "" >> $BODY
+
           echo "## 🔐 SHA256 Proof" >> $BODY
           echo '```' >> $BODY
           cat proof/sha256sum-*.txt >> $BODY
@@ -263,21 +209,15 @@ EOF
           cat ledger/build-info-*.txt >> $BODY
           echo '```' >> $BODY
 
-          # Use GITHUB_OUTPUT to pass the multi-line body to the next step
           echo "body<<EOF" >> $GITHUB_OUTPUT
           cat $BODY >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # --- 6. Create or Update GitHub Release ---
       - name: Create / Update Release
         uses: softprops/action-gh-release@v2
         with:
-          # Use a unique tag name based on the version
           tag_name: heap-hop-${{ env.APP_VERSION }}
           name: "Heap-Hop Edition - All is Heap (Go-like-Rust ${{ env.APP_VERSION }})"
-          # Use the dynamic body from the previous step
           body: ${{ steps.release_notes.outputs.body }}
-          # Attach all .zip files from the download directory
           files: release-assets/*.zip
-          # Overwrite files if a release with this tag already exists
           overwrite_files: true
