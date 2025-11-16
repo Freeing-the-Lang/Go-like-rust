@@ -1,4 +1,4 @@
-name: Go-like-Rust - Heap-Hop Build & Release
+name: Go-like-Rust - Heap-Hop Multi-Stage Build (Rust → Go → SpongeLang → NASM)
 
 on:
   push:
@@ -32,6 +32,9 @@ jobs:
         shell: bash
 
     steps:
+      # ------------------------------
+      # Stage 1: Checkout + Setup
+      # ------------------------------
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -57,10 +60,14 @@ jobs:
             echo "No Python dependencies."
           fi
 
+      # ------------------------------
+      # Stage 2: Rust → Go
+      # ------------------------------
       - name: Transpile Rust → Go
         run: |
           set -euo pipefail
-          mkdir -p build transpiled proof ledger
+          mkdir -p build transpiled proof ledger asm
+
           TRANSPILER="scripts/translate_rust_to_go.py"
           GENERATED=false
 
@@ -69,12 +76,12 @@ jobs:
           if [ -f "$TRANSPILER" ]; then
             if python "$TRANSPILER" src/ > transpiled/main.go; then
               GENERATED=true
-              echo "🟢 Transpilation OK."
+              echo "🟢 Rust→Go transpilation OK."
             else
-              echo "⚠️ Transpiler failed, using fallback."
+              echo "⚠️ Transpiler failed, using fallback Go file."
             fi
           else
-            echo "Transpiler script not found, using fallback."
+            echo "⚠️ No transpiler found, using fallback Go file."
           fi
 
           if [ "$GENERATED" = false ]; then
@@ -86,38 +93,81 @@ import (
   "os"
 )
 func main() {
-  fmt.Println("All is heap - Heap-Hop Edition running.")
-  fmt.Println("Every value lives on the heap.")
+  fmt.Println("All is heap - Go-like-Rust fallback.")
   reader := bufio.NewReader(os.Stdin)
   _, _ = reader.ReadBytes('\n')
 }
 EOF
           fi
 
-      - name: Build Go Executable
+      # ------------------------------
+      # Stage 3: Go → SpongeLang IR
+      # ------------------------------
+      - name: Extract Meaning (Go → SpongeLang IR)
         run: |
           set -euo pipefail
-          cd transpiled
 
-          GOOS_NAME=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
-          OUT="../build/go_like_rust_${GOOS_NAME}"
+          MEANING="scripts/go_to_sponge_meaning.py"
 
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            OUT="${OUT}.exe"
+          echo "🧠 Extracting SpongeLang Meaning from Go..."
+
+          if python "$MEANING" transpiled/main.go > transpiled/meaning.ir; then
+            echo "🟢 Meaning extraction OK."
+          else
+            echo "❌ Meaning extraction failed."
+            exit 1
           fi
 
-          echo "🔨 Building for ${GOOS_NAME}..."
-          go build -trimpath -ldflags="-s -w" -o "${OUT}" main.go
+      # ------------------------------
+      # Stage 4: SpongeLang IR → NASM Assembly
+      # ------------------------------
+      - name: Generate NASM Assembly
+        run: |
+          set -euo pipefail
 
-          cd ..
+          NASM_GEN="scripts/sponge_to_nasm.py"
+
+          echo "⚙️  Generating NASM assembly..."
+
+          if python "$NASM_GEN" transpiled/meaning.ir > asm/main.asm; then
+            echo "🟢 NASM generated."
+          else
+            echo "❌ NASM generation failed."
+            exit 1
+          fi
+
+      # ------------------------------
+      # Stage 5: Build Executable (NASM → binary)
+      # ------------------------------
+      - name: Build Executable via NASM
+        run: |
+          set -euo pipefail
+
+          GOOS_NAME=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
+
+          OUT="build/spongelang_${GOOS_NAME}"
+
+          echo "🔨 Building NASM executable for ${GOOS_NAME}..."
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            nasm -f win64 asm/main.asm -o asm/main.obj
+            link.exe /SUBSYSTEM:CONSOLE asm/main.obj /OUT:${OUT}.exe
+          else
+            nasm -felf64 asm/main.asm -o asm/main.o
+            ld asm/main.o -o ${OUT}
+          fi
 
           {
             echo "Version: ${{ env.APP_VERSION }}"
             date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
             echo "Commit: ${{ github.sha }}"
+            echo "Backend: SpongeLang → NASM"
             echo "OS: ${{ runner.os }}"
           } > ledger/build-info-${GOOS_NAME}.txt
 
+      # ------------------------------
+      # Stage 6: SHA256 Proof
+      # ------------------------------
       - name: SHA256 Proof
         run: |
           mkdir -p proof
@@ -127,27 +177,36 @@ EOF
             find build -type f -exec shasum -a 256 "{}" \; | sort > proof/sha256sum-${{ matrix.os }}.txt
           fi
 
-      - name: Create ZIP (zip / 7z fallback)
+      # ------------------------------
+      # Stage 7: ZIP Packaging
+      # ------------------------------
+      - name: Create ZIP
         run: |
           mkdir -p release-assets
           ZIP="release-assets/go-like-rust-${{ matrix.os }}.zip"
 
           if command -v zip >/dev/null 2>&1; then
-            zip -rq "$ZIP" build proof ledger transpiled
+            zip -rq "$ZIP" build proof ledger transpiled asm
           elif command -v 7z >/dev/null 2>&1; then
-            7z a -tzip -r "$ZIP" ./build ./proof ./ledger ./transpiled > /dev/null
+            7z a -tzip -r "$ZIP" ./build ./proof ./ledger ./transpiled ./asm > /dev/null
           else
-            echo "❌ No zip or 7z available."
+            echo "❌ No archiver available."
             exit 1
           fi
 
-      - name: Upload ZIP Artifact
+      # ------------------------------
+      # Stage 8: Upload Artifacts
+      # ------------------------------
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-like-rust-${{ matrix.os }}-${{ github.run_id }}
           path: release-assets/go-like-rust-${{ matrix.os }}.zip
           retention-days: 3
 
+  # =====================================================================
+  # FINALIZE JOB (MERGE PROOF/LEDGER + CREATE RELEASE)
+  # =====================================================================
   finalize:
     name: Finalize Release
     runs-on: ubuntu-latest
@@ -158,6 +217,9 @@ EOF
     steps:
       - uses: actions/checkout@v4
 
+      # ------------------------------
+      # Download all artifacts
+      # ------------------------------
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -165,6 +227,9 @@ EOF
           pattern: "go-like-rust-*"
           merge-multiple: true
 
+      # ------------------------------
+      # Extract Proof & Ledger
+      # ------------------------------
       - name: Extract Proof & Ledger
         run: |
           mkdir -p proof ledger
@@ -175,6 +240,9 @@ EOF
             rm -rf tmp
           done
 
+      # ------------------------------
+      # Commit Proof/Ledger (to repo)
+      # ------------------------------
       - name: Commit Proof/Ledger
         run: |
           git config user.name "github-actions[bot]"
@@ -190,21 +258,24 @@ EOF
             echo "No changes."
           fi
 
+      # ------------------------------
+      # Create Release Body
+      # ------------------------------
       - name: Build Release Body
         id: release_notes
         run: |
           BODY="release_body.md"
 
-          echo "Go-like-Rust - Heap-Hop Edition (${{ env.APP_VERSION }})" > $BODY
+          echo "Go-like-Rust - Heap-Hop Multi Stage Edition (${{ env.APP_VERSION }})" > $BODY
           echo "" >> $BODY
 
           echo "## 🔐 SHA256 Proof" >> $BODY
           echo '```' >> $BODY
           cat proof/sha256sum-*.txt >> $BODY
           echo '```' >> $BODY
-          echo "" >> $BODY
 
-          echo "## ℹ️ Build Ledger" >> $BODY
+          echo "" >> $BODY
+          echo "## 🧾 Build Ledger" >> $BODY
           echo '```' >> $BODY
           cat ledger/build-info-*.txt >> $BODY
           echo '```' >> $BODY
@@ -213,11 +284,14 @@ EOF
           cat $BODY >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      # ------------------------------
+      # FINAL RELEASE
+      # ------------------------------
       - name: Create / Update Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: heap-hop-${{ env.APP_VERSION }}
-          name: "Heap-Hop Edition - All is Heap (Go-like-Rust ${{ env.APP_VERSION }})"
+          name: "Heap-Hop Meaning Build (Rust → Go → SpongeLang → NASM) ${{ env.APP_VERSION }}"
           body: ${{ steps.release_notes.outputs.body }}
           files: release-assets/*.zip
           overwrite_files: true
