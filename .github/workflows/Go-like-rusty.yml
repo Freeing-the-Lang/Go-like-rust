@@ -85,7 +85,7 @@ jobs:
           fi
 
           if [ "$GENERATED" = false ]; then
-            cat << 'EOF' > transpiled/main.go
+            cat > transpiled/main.go <<EOF
             package main
             import (
             "bufio"
