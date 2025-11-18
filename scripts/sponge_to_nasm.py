@@ -41,9 +41,9 @@ def gen_macos(actions):
             data.append(f"msg{msg_count}_len equ $ - msg{msg_count}")
             msg_count += 1
 
-    code.append("global _start")
+    code.append("global _main")
     code.append("section .text")
-    code.append("_start:")
+    code.append("_main:")
 
     idx = 0
     for act, val in actions:
