@@ -163,7 +163,8 @@ jobs:
         run: |
          echo 🔨 Windows NASM build...
          nasm -f win64 asm/main.asm -o asm/main.obj
-         link.exe /SUBSYSTEM:CONSOLE asm/main.obj /OUT:build/spongelang_windows.exe
+         link.exe asm\main.obj kernel32.lib /ENTRY:main /SUBSYSTEM:CONSOLE /OUT:build\spongelang_windows.exe
+
 
          (
          echo Version: ${{ env.APP_VERSION }}
