@@ -84,21 +84,20 @@ jobs:
             echo "⚠️ No transpiler found, using fallback Go file."
           fi
 
-          if [ "$GENERATED" = false ]; then
-            cat > transpiled/main.go <<EOF
-            package main
-            import (
-            "bufio"
-            "fmt"
-            "os"
-            )
-            func main() {
-            fmt.Println("All is heap - Go-like-Rust fallback.")
-            reader := bufio.NewReader(os.Stdin)
-             _, _ = reader.ReadBytes('\n')
-            }
-            EOF
-          fi
+              if [ "$GENERATED" = false ]; then
+                echo "package main" > transpiled/main.go
+                echo "import (" >> transpiled/main.go
+                echo "  \"bufio\"" >> transpiled/main.go
+                echo "  \"fmt\"" >> transpiled/main.go
+                echo "  \"os\"" >> transpiled/main.go
+                echo ")" >> transpiled/main.go
+                echo "func main() {" >> transpiled/main.go
+                echo "  fmt.Println(\"All is heap - Go-like-Rust fallback.\")" >> transpiled/main.go
+                echo "  reader := bufio.NewReader(os.Stdin)" >> transpiled/main.go
+                echo "  _, _ = reader.ReadBytes('\n')" >> transpiled/main.go
+                echo "}" >> transpiled/main.go
+              fi
+
 
       # ------------------------------
       # Stage 3: Go → SpongeLang Meaning IR
