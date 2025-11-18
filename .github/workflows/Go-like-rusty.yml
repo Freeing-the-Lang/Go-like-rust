@@ -59,6 +59,10 @@ jobs:
           else
             echo "No Python dependencies."
           fi
+      - name: Setup MSVC Developer Command Prompt
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install NASM (macOS)
         if: runner.os == 'macOS'
         run: |
