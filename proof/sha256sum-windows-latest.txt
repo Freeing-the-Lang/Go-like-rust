@@ -1,1 +1,1 @@
-a7f556bb58d01d190721971c4e71040c0b32226b71b7b6a614d2acfd2f048ceb *build/go_like_rust_windows.exe
+03b928e4d0fe04fc774a0de428e1d0c5c9b9410e86091846c95d02f8e9dcea61 *build/spongelang_windows.exe
