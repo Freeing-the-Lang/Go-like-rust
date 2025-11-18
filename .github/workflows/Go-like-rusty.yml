@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  APP_VERSION: "v4.10.7"
+  APP_VERSION: "v4.10.8"
 
 permissions:
   contents: read
@@ -32,9 +32,9 @@ jobs:
         shell: bash
 
     steps:
-      # ------------------------------
+      # =====================================================================
       # Stage 1: Checkout + Setup
-      # ------------------------------
+      # =====================================================================
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -59,24 +59,29 @@ jobs:
           else
             echo "No Python dependencies."
           fi
+
+      # Windows: enable MSVC link.exe
       - name: Setup MSVC Developer Command Prompt
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
+      # Install NASM on macOS
       - name: Install NASM (macOS)
         if: runner.os == 'macOS'
         run: |
-         brew update
-         brew install nasm
-       
+          brew update
+          brew install nasm
+
+      # Install NASM on Ubuntu
       - name: Install NASM (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-         sudo apt update
-         sudo apt install -y nasm
-      # ------------------------------
+          sudo apt update
+          sudo apt install -y nasm
+
+      # =====================================================================
       # Stage 2: Rust → Go
-      # ------------------------------
+      # =====================================================================
       - name: Transpile Rust → Go
         run: |
           set -euo pipefail
@@ -98,24 +103,23 @@ jobs:
             echo "⚠️ No transpiler found, using fallback Go file."
           fi
 
-              if [ "$GENERATED" = false ]; then
-                echo "package main" > transpiled/main.go
-                echo "import (" >> transpiled/main.go
-                echo "  \"bufio\"" >> transpiled/main.go
-                echo "  \"fmt\"" >> transpiled/main.go
-                echo "  \"os\"" >> transpiled/main.go
-                echo ")" >> transpiled/main.go
-                echo "func main() {" >> transpiled/main.go
-                echo "  fmt.Println(\"All is heap - Go-like-Rust fallback.\")" >> transpiled/main.go
-                echo "  reader := bufio.NewReader(os.Stdin)" >> transpiled/main.go
-                echo "  _, _ = reader.ReadBytes('\n')" >> transpiled/main.go
-                echo "}" >> transpiled/main.go
-              fi
+          if [ "$GENERATED" = false ]; then
+            echo "package main" > transpiled/main.go
+            echo "import (" >> transpiled/main.go
+            echo "  \"bufio\"" >> transpiled/main.go
+            echo "  \"fmt\"" >> transpiled/main.go
+            echo "  \"os\"" >> transpiled/main.go
+            echo ")" >> transpiled/main.go
+            echo "func main() {" >> transpiled/main.go
+            echo "  fmt.Println(\"All is heap - Go-like-Rust fallback.\")" >> transpiled/main.go
+            echo "  reader := bufio.NewReader(os.Stdin)" >> transpiled/main.go
+            echo "  _, _ = reader.ReadBytes('\n')" >> transpiled/main.go
+            echo "}" >> transpiled/main.go
+          fi
 
-
-      # ------------------------------
+      # =====================================================================
       # Stage 3: Go → SpongeLang Meaning IR
-      # ------------------------------
+      # =====================================================================
       - name: Extract Meaning (Go → SpongeLang IR)
         run: |
           set -euo pipefail
@@ -130,9 +134,9 @@ jobs:
             exit 1
           fi
 
-      # ------------------------------
-      # Stage 4: SpongeLang IR → NASM
-      # ------------------------------
+      # =====================================================================
+      # Stage 4: SpongeLang IR → NASM Assembly
+      # =====================================================================
       - name: Generate NASM Assembly
         run: |
           set -euo pipefail
@@ -148,43 +152,70 @@ jobs:
             exit 1
           fi
 
-      # ------------------------------
-      # Stage 5: NASM → Executable
-      # ------------------------------
-      - name: Build Executable via NASM
+      # =====================================================================
+      # Stage 5: NASM → Executable (3OS FULL VERSION)
+      # =====================================================================
+
+      # ------------------------------ Windows (PE64)
+      - name: Build Executable via NASM (Windows)
+        if: runner.os == 'Windows'
         run: |
           set -euo pipefail
+          echo "🔨 Windows NASM build..."
 
-          # Normalize OS name
-          case "${{ runner.os }}" in
-            "Linux")   GOOS_NAME="ubuntu" ;;
-            "macOS")   GOOS_NAME="macos" ;;
-            "Windows") GOOS_NAME="windows" ;;
-          esac
-
-          OUT="build/spongelang_${GOOS_NAME}"
-
-          echo "🔨 Building NASM executable for ${GOOS_NAME}..."
-
-          if [[ "$GOOS_NAME" == "windows" ]]; then
-            nasm -f win64 asm/main.asm -o asm/main.obj
-            link.exe /SUBSYSTEM:CONSOLE asm/main.obj /OUT:${OUT}.exe
-          else
-            nasm -felf64 asm/main.asm -o asm/main.o
-            ld asm/main.o -o ${OUT}
-          fi
+          nasm -f win64 asm/main.asm -o asm/main.obj
+          link.exe /SUBSYSTEM:CONSOLE asm/main.obj /OUT:build/spongelang_windows.exe
 
           {
             echo "Version: ${{ env.APP_VERSION }}"
             date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
             echo "Commit: ${{ github.sha }}"
             echo "Pipeline: Rust → Go → SpongeLang → NASM"
-            echo "OS: ${{ runner.os }}"
-          } > ledger/build-info-${GOOS_NAME}.txt
+            echo "OS: Windows"
+          } > ledger/build-info-windows.txt
 
-      # ------------------------------
+
+      # ------------------------------ Linux (ELF64)
+      - name: Build Executable via NASM (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          echo "🔨 Linux NASM build..."
+
+          nasm -felf64 asm/main.asm -o asm/main.o
+          ld asm/main.o -o build/spongelang_ubuntu
+
+          {
+            echo "Version: ${{ env.APP_VERSION }}"
+            date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
+            echo "Commit: ${{ github.sha }}"
+            echo "Pipeline: Rust → Go → SpongeLang → NASM"
+            echo "OS: Linux"
+          } > ledger/build-info-ubuntu.txt
+
+
+      # ------------------------------ macOS (Mach-O 64bit)
+      - name: Build Executable via NASM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          echo "🔨 macOS NASM build..."
+
+          nasm -fmacho64 asm/main.asm -o asm/main.o
+          ld asm/main.o -o build/spongelang_macos
+
+          {
+            echo "Version: ${{ env.APP_VERSION }}"
+            date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
+            echo "Commit: ${{ github.sha }}"
+            echo "Pipeline: Rust → Go → SpongeLang → NASM"
+            echo "OS: macOS"
+          } > ledger/build-info-macos.txt
+
+
+      # =====================================================================
       # Stage 6: SHA256 Proof
-      # ------------------------------
+      # =====================================================================
       - name: SHA256 Proof
         run: |
           mkdir -p proof
@@ -194,9 +225,9 @@ jobs:
             find build -type f -exec shasum -a 256 "{}" \; | sort > proof/sha256sum-${{ matrix.os }}.txt
           fi
 
-      # ------------------------------
+      # =====================================================================
       # Stage 7: ZIP Packaging
-      # ------------------------------
+      # =====================================================================
       - name: Create ZIP
         run: |
           case "${{ runner.os }}" in
@@ -217,9 +248,9 @@ jobs:
             exit 1
           fi
 
-      # ------------------------------
+      # =====================================================================
       # Stage 8: Upload Artifacts
-      # ------------------------------
+      # =====================================================================
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -266,7 +297,7 @@ jobs:
           git add proof ledger
 
           if ! git.diff --cached --quiet; then
-            git commit -m "Proof/Ledger sync (${{ env.APP_VERSION }}) [skip ci]"
+            git.commit -m "Proof/Ledger sync (${{ env.APP_VERSION }}) [skip ci]"
             git push
           else
             echo "No changes."
