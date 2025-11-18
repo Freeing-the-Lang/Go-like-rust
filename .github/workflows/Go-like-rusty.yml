@@ -64,7 +64,12 @@ jobs:
         run: |
          brew update
          brew install nasm
-
+       
+      - name: Install NASM (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+         sudo apt update
+         sudo apt install -y nasm
       # ------------------------------
       # Stage 2: Rust → Go
       # ------------------------------
