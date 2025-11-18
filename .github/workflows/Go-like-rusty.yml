@@ -59,6 +59,11 @@ jobs:
           else
             echo "No Python dependencies."
           fi
+      - name: Install NASM (macOS)
+        if: runner.os == 'macOS'
+        run: |
+         brew update
+         brew install nasm
 
       # ------------------------------
       # Stage 2: Rust → Go
