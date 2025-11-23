@@ -1,1 +1,1 @@
-edbc670c10f83c6dddedf8214e5b2ab168e5992a4035d5cc2dc37c851559937e *build/spongelang_windows.exe
+8d0badc6cd8967737346ccc0a48a3f431d19e22799499b9043ddca67d72913c4 *build/spongelang_windows.exe
