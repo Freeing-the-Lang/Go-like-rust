@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  APP_VERSION: "v4.10.8"
+  APP_VERSION: "v4.10.9"
 
 permissions:
   contents: read
@@ -69,7 +69,6 @@ jobs:
       - name: Install NASM (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew update
           brew install nasm
 
       # Install NASM on Ubuntu
@@ -134,13 +133,15 @@ jobs:
             exit 1
           fi
 
+          # 안전 체크
+          test -s transpiled/meaning.ir
+
       # =====================================================================
       # Stage 4: SpongeLang IR → NASM Assembly
       # =====================================================================
       - name: Generate NASM Assembly
         run: |
           set -euo pipefail
-
           NASM_GEN="scripts/sponge_to_nasm.py"
 
           echo "⚙️ Generating NASM assembly..."
@@ -152,6 +153,9 @@ jobs:
             exit 1
           fi
 
+          # 안전 체크
+          test -s asm/main.asm
+
       # =====================================================================
       # Stage 5: NASM → Executable (3OS FULL VERSION)
       # =====================================================================
@@ -161,17 +165,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-         echo 🔨 Windows NASM build...
-         nasm -f win64 asm/main.asm -o asm/main.obj
-         link.exe asm\main.obj kernel32.lib /ENTRY:main /SUBSYSTEM:CONSOLE /OUT:build\spongelang_windows.exe
+          echo 🔨 Windows NASM build...
+          nasm -f win64 asm/main.asm -o asm/main.obj
 
+          REM 안정화된 link.exe 옵션
+          link.exe asm\main.obj ^
+            /defaultlib:kernel32.lib ^
+            /defaultlib:user32.lib ^
+            /ENTRY:main ^
+            /SUBSYSTEM:CONSOLE ^
+            /OUT:build\spongelang_windows.exe
 
-         (
-         echo Version: ${{ env.APP_VERSION }}
-         echo Pipeline: Rust → Go → SpongeLang → NASM
-         echo OS: Windows
-         ) > ledger/build-info-windows.txt
-
+          (
+            echo Version: ${{ env.APP_VERSION }}
+            echo Pipeline: Rust → Go → SpongeLang → NASM
+            echo OS: Windows
+          ) > ledger/build-info-windows.txt
 
       # ------------------------------ Linux (ELF64)
       - name: Build Executable via NASM (Linux)
@@ -191,35 +200,34 @@ jobs:
             echo "OS: Linux"
           } > ledger/build-info-ubuntu.txt
 
-
       # ------------------------------ macOS (Mach-O 64bit)
       - name: Build Executable via NASM (macOS)
         if: runner.os == 'macOS'
         run: |
-         set -euo pipefail
-         echo "🔨 macOS NASM build..."
+          set -euo pipefail
+          echo "🔨 macOS NASM build..."
 
-         nasm -fmacho64 asm/main.asm -o asm/main.o
+          nasm -fmacho64 asm/main.asm -o asm/main.o
 
-         SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+          # 자동 SDK 탐지 (안정화)
+          SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
 
-         ld \
-         -platform_version macos 11.0 11.0 \
-         -arch x86_64 \
-         -syslibroot "$SDKROOT" \
-         -lSystem \
-         -e _main \
-         asm/main.o \
-         -o build/spongelang_macos
+          ld \
+            -platform_version macos 11.0 11.0 \
+            -arch x86_64 \
+            -syslibroot "$SDKROOT" \
+            -lSystem \
+            -e _main \
+            asm/main.o \
+            -o build/spongelang_macos
 
-         {
-         echo "Version: ${{ env.APP_VERSION }}"
-         date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
-         echo "Commit: ${{ github.sha }}"
-         echo "Pipeline: Rust → Go → SpongeLang → NASM"
-         echo "OS: macOS"
-         } > ledger/build-info-macos.txt
-
+          {
+            echo "Version: ${{ env.APP_VERSION }}"
+            date -u +"Build Time (UTC): %Y-%m-%dT%H:%M:%SZ"
+            echo "Commit: ${{ github.sha }}"
+            echo "Pipeline: Rust → Go → SpongeLang → NASM"
+            echo "OS: macOS"
+          } > ledger/build-info-macos.txt
 
       # =====================================================================
       # Stage 6: SHA256 Proof
@@ -310,7 +318,6 @@ jobs:
           else
             echo "No changes."
           fi
-
 
       - name: Build Release Body
         id: release_notes
